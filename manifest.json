@@ -3,5 +3,7 @@
     "entry": "${modFile}",
     "version": "${modVersion}",
     "type": "native",
+	"author": "PuceLi",
+    "description": "NoteBot, but in LeviLamina",
     "platform": "${modPlatform}"
 }

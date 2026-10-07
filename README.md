@@ -1,29 +1,52 @@
-# LeviLamina Mod Template
+# NoteBot
 
-> [!WARNING]
-> Remember to change the [LICENSE](LICENSE) file when you use this template
+NoteBot is a client-side feature that automatically plays songs by tuning and hitting nearby Note Blocks based on loaded NBS (Noteblock Studio) files.
 
-Mod Template for LeviLamina
+[![中文](https://img.shields.io/badge/中文-informational?style=for-the-badge)](README_zh.md)
+
+---
+
+## Installation
+
+Make sure **LeviLamina** is installed.
+
+### LIP
+
+`lip install github.com/PuceLi/NoteBot`
+
+### Manual Installation
+
+- Download `NoteBot-client-windows-x64.zip` from [Releases](https://github.com/PuceLi/NoteBot/releases).
+- Use **LeviLauncher** or extract the files to `/path/to/your/mods/dir`.
+- Launch the game.
 
 ## Usage
 
-For detailed instructions, see the [LeviLamina Documentation](https://lamina.levimc.org/developer_guides/tutorials/create_your_first_mod/)
+### First-Time Use
 
-1. Generate a new repository from this template
-2. Clone the new repository
-3. Change the mod name and the expected LeviLamina version in `xmake.lua`
-4. Add your code.
-5. Run `xmake f -y -p windows -a x64 -m release` in the root of the repository
-6. Run `xmake` to build the mod.
+- After launching for the first time, place `.nbs` files into `./mods/NoteBot/data/songs`.
+- Enter a world, stand next to a cluster of note blocks, and press `L` to open the interface (keybinds can be customized in the UI).
+- Click **Open Song GUI** right above the keybind section to bring up the song list.
+- Click **Load** next to the song you want to play.
+- Return to the main screen, click **Scan NoteBlocks**, and then click **Play** to start playing.
 
-After a successful build, you will find mod in `bin/`
+> There will be a brief verification period after tuning; this is expected behavior and will be optimized in the future.
 
-## Contributing
+### Switching Songs
 
-Ask questions by creating an issue.
+- Click **Clear NoteBlocks** to unload the current song.
+- Select a new song and click **Load** to load it.
 
-PRs accepted.
+## Project Status
 
-## License
+This mod currently has several known issues; feedback is welcome below.
 
-CC0-1.0 © LeviMC(LiteLDev)
+## Third-Party Credits
+
+- [Meteor Client/(GPL-3.0/)](https://github.com/MeteorDevelopment/meteor-client) - Ported UI to this project
+
+## Vedio
+
+[YouTuBe](https://youtu.be/JvPiIVKTFDY)
+
+[BiliBili](https://www.bilibili.com/video/BV1mmHk6dEop)
