@@ -12,7 +12,7 @@ option_end()
 -- add_requires("levilamina develop") to use develop version
 -- please note that you should add bdslibrary yourself if using dev version
 add_requires("levilamina 26.51.7", {configs = {target_type = get_config("target_type")}})
-add_requires("imgui v1.92.9", {configs = {shared = false, win32 = true, dx11 = true, dx12 = true}})
+add_requires("imgui v1.93.0", {configs = {shared = false, win32 = true, dx11 = true, dx12 = true}})
 add_requires("minhook", {configs = {shared = false}})
 add_requires("levibuildscript")
 
@@ -28,7 +28,7 @@ target("NoteBot") -- Change this to your mod name.
     add_rules("@levibuildscript/linkrule")
     add_rules("@levibuildscript/modpacker")
     if is_plat("windows") then
-        add_defines("NOMINMAX", "UNICODE")
+        add_defines("NOMINMAX", "UNICODE", "_HAS_CXX23=1")
         set_exceptions("none") -- To avoid conflicts with /EHa.
         add_cxflags( "/EHa", "/utf-8", "/W4", "/w44265", "/w44289", "/w44296", "/w45263", "/w44738", "/w45204")
         add_cxflags(
