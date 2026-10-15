@@ -30,7 +30,7 @@ NoteBot 是一个可以加载的 NBS（Noteblock Studio）文件弹奏音符盒�
 - 点击想要演奏的歌曲旁边的 **Load**
 - 返回主界面，点击 **Scan NoteBlocks**，然后点击 **Play** 开始演奏
 
-> 调音完成后会有一小段验证时间，这是正常现象，未来会进行优
+> 调音完成后会有一小段验证时间，这是正常现象，未来会进行优化
 
 ### 切换歌曲
 
@@ -45,7 +45,7 @@ NoteBot 是一个可以加载的 NBS（Noteblock Studio）文件弹奏音符盒�
 
 ## Credits
 
-- [Meteor Client/(GPL-3.0/)](https://github.com/MeteorDevelopment/meteor-client) - 移植 UI 到此项目
+- [Meteor Client(GPL-3.0)](https://github.com/MeteorDevelopment/meteor-client) - 移植 UI 到此项目
 
 ## 视频演示
 
