@@ -30,7 +30,7 @@ struct KeybindsConfig {
 };
 
 struct NoteBotConfig {
-    int version = 5;
+    int version = 6;
 
     enum class NotebotMode {
         Manual = 0,
@@ -50,6 +50,7 @@ struct NoteBotConfig {
     bool renderBoxes = true;
     bool renderBoxLines = true;
     bool renderBoxFaces = false;
+    bool renderBoxThroughWalls = false;
     bool showUnmappedBoxes = true;
     bool renderText = true;
     bool showPlaybackHud = true;

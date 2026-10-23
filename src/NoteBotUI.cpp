@@ -126,6 +126,7 @@ void NoteBotUI::setPlayer(NoteBotPlayer* player) {
     mMeteorUI->active = true;
     auto& actions = mMeteorUI->actions;
     actions.loadSong = [this](const fs::path& path) { mPlayer->loadSong(path); };
+    actions.previewSong = [this](const fs::path& path) { mPlayer->previewSong(path); };
     actions.pauseResume = [this] {
         const auto state = mPlayer->getDisplayState();
         if (!state.hasSong) return;
@@ -175,7 +176,8 @@ void NoteBotUI::syncMeteorSettingsFromConfig() {
     settings.checkNoteblocksAgainDelay = config.checkNoteblocksDelay;
     settings.renderText = config.renderText;
     settings.renderBoxes = config.renderBoxes;
-    settings.shapeMode = config.renderBoxLines && config.renderBoxFaces ? 2
+    settings.shapeMode = config.renderBoxThroughWalls ? 3
+                       : config.renderBoxLines && config.renderBoxFaces ? 2
                        : config.renderBoxFaces ? 1 : 0;
     settings.noteTextScale = config.noteTextScale;
     settings.noteTextHeight = config.noteTextHeight;
@@ -208,7 +210,8 @@ void NoteBotUI::applyMeteorSettings() {
     config.checkNoteblocksDelay = settings.checkNoteblocksAgainDelay;
     config.renderText = settings.renderText;
     config.renderBoxes = settings.renderBoxes;
-    config.renderBoxLines = settings.shapeMode != 1;
+    config.renderBoxThroughWalls = settings.shapeMode == 3;
+    config.renderBoxLines = settings.shapeMode == 0 || settings.shapeMode == 2;
     config.renderBoxFaces = settings.shapeMode != 0;
     config.noteTextScale = settings.noteTextScale;
     config.noteTextHeight = settings.noteTextHeight;
@@ -247,6 +250,9 @@ void NoteBotUI::render() {
             const auto diagnostics = manager.getMappingDiagnostics();
             mMeteorUI->songLoaded = display.hasSong;
             mMeteorUI->playing = display.isPlaying;
+            mMeteorUI->playingMode = !display.hasSong ? meteor::NotebotPlayingMode::None :
+                display.isPreview ? meteor::NotebotPlayingMode::Preview :
+                                    meteor::NotebotPlayingMode::Noteblocks;
             mMeteorUI->currentTick = display.currentTick;
             mMeteorUI->lastTick = display.totalTicks;
             mMeteorUI->songTitle = display.songTitle;

@@ -13,6 +13,9 @@
 #include "mc/deps/core_graphics/enums/PrimitiveMode.h"
 #include "mc/deps/minecraft_renderer/renderer/Mesh.h"
 #include "mc/deps/minecraft_renderer/renderer/MaterialPtr.h"
+#include "mc/deps/minecraft_renderer/renderer/RenderMaterial.h"
+#include "mc/deps/core/renderer/RenderMaterialInfo.h"
+#include "mc/deps/core_graphics/enums/RenderState.h"
 #include "mc/deps/minecraft_renderer/resources/ClientTexture.h"
 #include "mc/deps/minecraft_renderer/resources/ServerTexture.h"
 #include "mc/deps/minecraft_renderer/resources/OffscreenCaptureDescription.h"
@@ -51,6 +54,8 @@ struct WorldOverlayState {
     std::vector<WorldOutline> blocks;
     bool drawFaces = false;
     bool drawLines = true;
+    bool drawInternalFaces = false;
+    bool throughWalls = false;
     float expansion = 0.01f;
     uint64_t revision = 0;
 };
@@ -65,6 +70,7 @@ bool isGameplayScreen() {
 
 bool sameOverlay(const WorldOverlayState& lhs, const WorldOverlayState& rhs) {
     if (lhs.drawFaces != rhs.drawFaces || lhs.drawLines != rhs.drawLines ||
+        lhs.drawInternalFaces != rhs.drawInternalFaces || lhs.throughWalls != rhs.throughWalls ||
         lhs.expansion != rhs.expansion || lhs.blocks.size() != rhs.blocks.size()) return false;
     for (size_t index = 0; index < lhs.blocks.size(); ++index) {
         const auto& a = lhs.blocks[index];
@@ -111,7 +117,9 @@ void buildOverlayMesh(ScreenContext& screen, const WorldOverlayState& overlay, O
             return result;
         }();
         Tessellator batch(screen.tessellator.mBufferResourceService);
-        batch.begin({}, mce::PrimitiveMode::QuadList, static_cast<int>(overlay.blocks.size() * 24), false);
+        const int verticesPerBlock = overlay.drawInternalFaces ? 48 : 24;
+        batch.begin({}, mce::PrimitiveMode::QuadList,
+                    static_cast<int>(overlay.blocks.size() * verticesPerBlock), false);
         for (const auto& block : overlay.blocks) {
             const auto& color = block.sideColor;
             if (color[3] <= 0.0f) continue;
@@ -123,11 +131,17 @@ void buildOverlayMesh(ScreenContext& screen, const WorldOverlayState& overlay, O
                 {pos.x, pos.y, pos.z - 1}, {pos.x, pos.y, pos.z + 1}
             }};
             for (size_t face = 0; face < faces.size(); ++face) {
-                if (positions.contains(neighbors[face])) continue;
+                if (positions.contains(neighbors[face]) && !overlay.drawInternalFaces) continue;
                 for (auto corner = faces[face].rbegin(); corner != faces[face].rend(); ++corner) {
                     vertex(batch, pos, *corner);
                 }
                 cache.faceVertices += 4;
+                if (overlay.drawInternalFaces) {
+                    for (auto corner = faces[face].begin(); corner != faces[face].end(); ++corner) {
+                        vertex(batch, pos, *corner);
+                    }
+                    cache.faceVertices += 4;
+                }
             }
         }
         if (cache.faceVertices > 0) {
@@ -192,6 +206,25 @@ void renderWorldBoxes(BaseActorRenderContext& context) {
     }
     mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
 
+    // The fourth shape mode is a translucent jelly-style x-ray face overlay.
+    // Material state is temporarily changed for this draw only because the
+    // game material is shared by other render paths.
+    mce::RenderState savedFaceState = mce::RenderState::None;
+    bool restoreFaceState = false;
+    if (overlay.throughWalls && faceMaterial.mRenderMaterialInfoPtr &&
+        faceMaterial.mRenderMaterialInfoPtr->mPtr) {
+        auto& renderMaterial = *faceMaterial.mRenderMaterialInfoPtr->mPtr;
+        savedFaceState = renderMaterial.mStateMask;
+        constexpr uint16_t xrayState =
+            static_cast<uint16_t>(mce::RenderState::DisableDepthTest) |
+            static_cast<uint16_t>(mce::RenderState::DisableDepthWrite) |
+            static_cast<uint16_t>(mce::RenderState::DisableCulling) |
+            static_cast<uint16_t>(mce::RenderState::Blending);
+        renderMaterial.mStateMask = static_cast<mce::RenderState>(
+            static_cast<uint16_t>(savedFaceState) | xrayState);
+        restoreFaceState = true;
+    }
+
     const Vec3 camera = context.mImpl->mCameraPosition;
     auto ref = screen.camera.worldMatrixStack->push(false);
     ref.stack->_isDirty = true;
@@ -208,6 +241,10 @@ void renderWorldBoxes(BaseActorRenderContext& context) {
     if (cache.lines && lineMaterial.mRenderMaterialInfoPtr) {
         cache.lines->renderMesh(screen, lineMaterial, gsl::span<mce::ClientTexture const*>{}, 0,
                                 cache.lineVertices, OffscreenCaptureDescription{}, nullptr);
+    }
+    if (restoreFaceState && faceMaterial.mRenderMaterialInfoPtr &&
+        faceMaterial.mRenderMaterialInfoPtr->mPtr) {
+        faceMaterial.mRenderMaterialInfoPtr->mPtr->mStateMask = savedFaceState;
     }
     ref.stack->_isDirty = true;
     if (ref.stack->sortOrigin->has_value() &&
@@ -298,6 +335,8 @@ void NoteBlockRenderer::render(const NoteBlockManager& manager, const NoteBotCon
     WorldOverlayState overlay;
     overlay.drawFaces = config.renderBoxFaces;
     overlay.drawLines = config.renderBoxLines;
+    overlay.drawInternalFaces = config.renderBoxThroughWalls;
+    overlay.throughWalls = config.renderBoxThroughWalls;
     overlay.expansion = config.boxExpansion;
     if (config.renderBoxes) {
         overlay.blocks.reserve(noteBlocks.size());

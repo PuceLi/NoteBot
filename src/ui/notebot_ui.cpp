@@ -223,6 +223,13 @@ void NotebotUi::drawSongs() {
                     const std::string name = utf8(path.stem());
                     ImGui::TextUnformatted(name.c_str());
                     const float loadWidth = ImGui::CalcTextSize("Load").x + 12;
+                    const float previewWidth = ImGui::CalcTextSize("Preview").x + 12;
+                    ImGui::SameLine(contentWidth - loadWidth - previewWidth - 3);
+                    if (meteorButton("Preview") && actions.previewSong) {
+                        actions.previewSong(path);
+                        showSongs = false;
+                        showModule = true;
+                    }
                     ImGui::SameLine(contentWidth - loadWidth);
                     if (meteorButton("Load") && actions.loadSong) {
                         actions.loadSong(path);

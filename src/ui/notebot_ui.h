@@ -26,7 +26,7 @@ struct NotebotSettings {
     int checkNoteblocksAgainDelay = 3;
     bool renderText = true;
     bool renderBoxes = true;
-    int shapeMode = 0;                  // 0 Lines, 1 Sides, 2 Both
+    int shapeMode = 0;                  // 0 Lines, 1 Sides, 2 Both, 3 Jelly (X-Ray)
     std::array<int, 16> noteMap{{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}};
     std::array<std::array<float, 4>, 12> renderColors{{
         {{0.8f,0.0f,0.0f,0.12f}}, {{0.8f,0.0f,0.0f,1.0f}},

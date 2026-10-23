@@ -269,7 +269,7 @@ bool deserialize(const char* text, NotebotSettings& output, std::string& bind) {
     value.checkNoteblocksAgainDelay=std::clamp(value.checkNoteblocksAgainDelay,1,100);
     value.mode=std::clamp(value.mode,0,1);
     value.playingMode=std::clamp(value.playingMode,0,1);
-    value.shapeMode=std::clamp(value.shapeMode,0,2);
+    value.shapeMode=std::clamp(value.shapeMode,0,3);
     value.noteTextScale=std::isfinite(value.noteTextScale) ? std::clamp(value.noteTextScale,0.5f,3.0f) : 1.0f;
     value.noteTextHeight=std::isfinite(value.noteTextHeight) ? std::clamp(value.noteTextHeight,0.5f,2.5f) : 1.3f;
     value.boxExpansion=std::isfinite(value.boxExpansion) ? std::clamp(value.boxExpansion,0.001f,0.08f) : 0.01f;
@@ -360,8 +360,8 @@ void NotebotUi::drawModule() {
                     actions.resetPlaybackHudPosition();
                 changed |= boolRow("Render Text","Whether to render text above noteblocks",settings.renderText,defaults.renderText,width);
                 changed |= boolRow("Render Boxes","Whether to render noteblock outlines",settings.renderBoxes,defaults.renderBoxes,width);
-                const char* shapes[]={"Lines","Sides","Both"};
-                changed |= enumRow("Shape Mode","How the shapes are rendered",settings.shapeMode,defaults.shapeMode,shapes,3,width);
+                const char* shapes[]={"Lines","Sides","Both","Jelly (X-Ray)"};
+                changed |= enumRow("Shape Mode","Jelly uses translucent faces through walls, including faces between adjacent blocks.",settings.shapeMode,defaults.shapeMode,shapes,4,width);
                 static constexpr const char* names[]={"Untuned Side Color","Untuned Line Color","Tuned Side Color","Tuned Line Color","Hit Side Color","Hit Line Color","Scanned Side Color","Scanned Line Color","Playing Side Color","Playing Line Color","Pitch Text Color","Remaining Text Color"};
                 for (int i=0;i<12;++i) {
                     bool openEditor=false;

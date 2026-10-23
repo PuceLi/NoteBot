@@ -18,6 +18,7 @@ public:
     struct DisplayState {
         bool hasSong = false;
         bool isPlaying = false;
+        bool isPreview = false;
         int currentTick = 0;
         int totalTicks = 0;
         std::string songTitle;
@@ -29,6 +30,7 @@ public:
     ~NoteBotPlayer();
 
     bool loadSong(const std::filesystem::path& filePath);
+    bool previewSong(const std::filesystem::path& filePath);
     void play();
     void pause();
     void stop();
@@ -66,12 +68,17 @@ private:
     };
     enum class Stage { Ready, Tuning, Verifying, Playing, Error };
     enum class ControlRequest { None, Play, Pause, Stop };
+    struct PendingSong {
+        Song song;
+        bool preview = false;
+    };
 
     std::optional<Song> mSong;
     std::mutex mPendingSongMutex;
-    std::optional<Song> mPendingSong;
+    std::optional<PendingSong> mPendingSong;
     std::atomic<std::shared_ptr<const DisplayState>> mPublishedDisplay;
     bool                mIsPlaying   = false;
+    bool                mPreviewMode = false;
     int                 mCurrentTick = 0;
     int                 mTickCounter = 0;
     std::chrono::steady_clock::time_point mNextReadyScanTime{};
@@ -100,6 +107,7 @@ private:
     std::string mError;
 
     void playNotesAtTick(int tick);
+    void playPreviewNotesAtTick(int tick);
     void tickInternal();
     void publishDisplayState();
     std::string composeStatus() const;
@@ -110,6 +118,7 @@ private:
     bool refreshTuneTarget(TuneTarget& target, class BlockSource& blockSource);
     bool updateTuneTargets();
     void reset();
+    bool queueSong(const std::filesystem::path& filePath, bool preview);
 };
 
 } // namespace notebot
