@@ -311,7 +311,13 @@ void NoteBotPlayer::tickInternal() {
     }
 
     switch (mPendingControl.exchange(ControlRequest::None, std::memory_order_acq_rel)) {
-    case ControlRequest::Play: beginTuning(); break;
+    case ControlRequest::Play:
+        if (mStage == Stage::Playing && mSong) {
+            mIsPlaying = true;
+        } else {
+            beginTuning();
+        }
+        break;
     case ControlRequest::Pause:
         if (mStage == Stage::Playing) mIsPlaying = !mIsPlaying;
         break;
