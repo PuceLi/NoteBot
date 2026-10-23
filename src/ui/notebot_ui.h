@@ -104,6 +104,9 @@ private:
     std::string filter_;
     char searchBuffer_[256]{};
     bool songsExpanded_ = true;
+    bool songsLayoutLoaded_ = false;
+    float songsExpandedWidth_ = 416.0f;
+    float songsExpandedHeight_ = 650.0f;
     bool moduleExpanded_ = true;
     bool moduleLayoutLoaded_ = false;
     float moduleExpandedWidth_ = 650.0f;

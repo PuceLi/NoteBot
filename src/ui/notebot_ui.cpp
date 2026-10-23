@@ -171,13 +171,27 @@ void NotebotUi::drawSongs() {
     const float windowHeight = songsExpanded_ ? headerHeight + 8 + (fontSize + kPad * 2) * 2 + kSpacing * 2 + listHeight + 11 : headerHeight;
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(416, windowHeight), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(300, 150), ImVec2(FLT_MAX, FLT_MAX));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(300, headerHeight), ImVec2(FLT_MAX, FLT_MAX));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(kSpacing, kSpacing));
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar;
     if (ImGui::Begin("Notebot Songs##meteor", &showSongs, flags)) {
+        if (!songsLayoutLoaded_) {
+            songsExpanded_ = ImGui::GetWindowSize().y > headerHeight + 10.0f;
+            songsLayoutLoaded_ = true;
+        }
+        const bool wasExpanded = songsExpanded_;
+        if (wasExpanded) {
+            songsExpandedWidth_ = ImGui::GetWindowSize().x;
+            songsExpandedHeight_ = ImGui::GetWindowSize().y;
+        }
         header("Notebot Songs", songsExpanded_);
+        if (wasExpanded && !songsExpanded_) {
+            ImGui::SetWindowSize(ImVec2(songsExpandedWidth_, headerHeight));
+        } else if (!wasExpanded && songsExpanded_) {
+            ImGui::SetWindowSize(ImVec2(songsExpandedWidth_, songsExpandedHeight_));
+        }
         if (songsExpanded_) {
             ImGui::SetCursorPosX(8);
             ImGui::BeginGroup();
