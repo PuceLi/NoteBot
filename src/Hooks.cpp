@@ -202,7 +202,7 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
 ) {
     origin(source, packet);
     static std::atomic<unsigned> logged{0};
-    if (logged.fetch_add(1, std::memory_order_relaxed) < 32) {
+    if (getConfig().debugBlockEvents && logged.fetch_add(1, std::memory_order_relaxed) < 32) {
         const auto& pos = packet.mPos.get();
         NoteBot::getInstance().getSelf().getLogger().info(
             "BlockEvent packet: pos=({},{},{}), type={}, data={}",

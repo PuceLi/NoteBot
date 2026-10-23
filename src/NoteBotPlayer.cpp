@@ -418,22 +418,27 @@ void NoteBotPlayer::tickInternal() {
             return;
         }
 
-        bool paused = client->isShowingPauseScreen() || player->getLevel().getSimPaused();
-        bool sameSimulationTick = false;
-        if (auto levelRef = ll::service::getLevel(); levelRef.has_value()) {
-            paused = paused || levelRef.value().getSimPaused();
-            const uint64_t worldTick = levelRef.value().getCurrentTick().tickID;
-            sameSimulationTick = mHasSimulationTick && worldTick == mLastSimulationTick;
-            if (!sameSimulationTick) {
-                mLastSimulationTick = worldTick;
-                mHasSimulationTick = true;
-                mLastSimulationAdvance = std::chrono::steady_clock::now();
+        if (mPreviewMode) {
+            mWorldPaused.store(false, std::memory_order_release);
+            mHasSimulationTick = false;
+        } else {
+            bool paused = client->isShowingPauseScreen() || player->getLevel().getSimPaused();
+            bool sameSimulationTick = false;
+            if (auto levelRef = ll::service::getLevel(); levelRef.has_value()) {
+                paused = paused || levelRef.value().getSimPaused();
+                const uint64_t worldTick = levelRef.value().getCurrentTick().tickID;
+                sameSimulationTick = mHasSimulationTick && worldTick == mLastSimulationTick;
+                if (!sameSimulationTick) {
+                    mLastSimulationTick = worldTick;
+                    mHasSimulationTick = true;
+                    mLastSimulationAdvance = std::chrono::steady_clock::now();
+                }
             }
+            const bool stalled = sameSimulationTick &&
+                std::chrono::steady_clock::now() - mLastSimulationAdvance > std::chrono::milliseconds(500);
+            mWorldPaused.store(paused || stalled, std::memory_order_release);
+            if (paused || sameSimulationTick) return;
         }
-        const bool stalled = sameSimulationTick &&
-            std::chrono::steady_clock::now() - mLastSimulationAdvance > std::chrono::milliseconds(500);
-        mWorldPaused.store(paused || stalled, std::memory_order_release);
-        if (paused || sameSimulationTick) return;
     } else {
         mWorldPaused.store(false, std::memory_order_release);
     }

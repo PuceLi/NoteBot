@@ -30,7 +30,7 @@ struct KeybindsConfig {
 };
 
 struct NoteBotConfig {
-    int version = 6;
+    int version = 7;
 
     enum class NotebotMode {
         Manual = 0,
@@ -66,6 +66,7 @@ struct NoteBotConfig {
     bool autoPlay = false;
     bool transposeOutOfRange = true;
     bool swingArm = true;
+    bool debugBlockEvents = false;
 
     ColorConfig colors;
     std::array<float, 4> pitchTextColor = {0.0f, 0.8f, 0.0f, 1.0f};
