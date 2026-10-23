@@ -53,7 +53,7 @@ struct NoteBotConfig {
     bool renderBoxThroughWalls = false;
     bool showUnmappedBoxes = true;
     bool renderText = true;
-    bool showPlaybackHud = true;
+    bool showNowPlaying = true;
     float noteTextScale = 1.0f;
     float noteTextHeight = 1.3f;
     float boxExpansion = 0.01f;

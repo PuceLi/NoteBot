@@ -351,13 +351,13 @@ void NotebotUi::drawModule() {
                 changed |= intRow("Final Verify Delay","Ticks to wait after tuning before checking note blocks",settings.checkNoteblocksAgainDelay,defaults.checkNoteblocksAgainDelay,1,100,width);
             }
             if (section("Render",renderExpanded_,width)) {
-                if (button(showPlaybackHud ? "Hide Now Playing" : "Show Now Playing", width)) {
-                    showPlaybackHud = !showPlaybackHud;
-                    if (actions.playbackHudVisibilityChanged)
-                        actions.playbackHudVisibilityChanged(showPlaybackHud);
+                if (button(showNowPlaying ? "Hide Now Playing" : "Show Now Playing", width)) {
+                    showNowPlaying = !showNowPlaying;
+                    if (actions.nowPlayingVisibilityChanged)
+                        actions.nowPlayingVisibilityChanged(showNowPlaying);
                 }
-                if (button("Reset Playback HUD Position", width) && actions.resetPlaybackHudPosition)
-                    actions.resetPlaybackHudPosition();
+                if (button("Reset Now Playing Position", width) && actions.resetNowPlayingPosition)
+                    actions.resetNowPlayingPosition();
                 changed |= boolRow("Render Text","Whether to render text above noteblocks",settings.renderText,defaults.renderText,width);
                 changed |= boolRow("Render Boxes","Whether to render noteblock outlines",settings.renderBoxes,defaults.renderBoxes,width);
                 const char* shapes[]={"Lines","Sides","Both","Jelly (X-Ray)"};

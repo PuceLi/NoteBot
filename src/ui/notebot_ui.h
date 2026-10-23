@@ -46,8 +46,8 @@ struct NotebotActions {
     std::function<void(const std::filesystem::path&)> loadSong;
     std::function<void(const std::filesystem::path&)> previewSong;
     std::function<void()> alignCenter;
-    std::function<void()> resetPlaybackHudPosition;
-    std::function<void(bool)> playbackHudVisibilityChanged;
+    std::function<void()> resetNowPlayingPosition;
+    std::function<void(bool)> nowPlayingVisibilityChanged;
     std::function<void()> pauseResume;
     std::function<void()> stop;
     std::function<void()> scanNoteBlocks;
@@ -76,7 +76,7 @@ public:
     int currentTick = 0;
     int lastTick = 0;
     bool playing = false;
-    bool showPlaybackHud = true;
+    bool showNowPlaying = true;
     bool active = false;
     bool favorite = false;
     bool toggleOnBindRelease = false;

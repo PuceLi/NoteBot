@@ -34,11 +34,11 @@ private:
     int             mSelectedSongIndex = -1;
     char            mSongFolderPath[256];
     bool            mConfigDirty = false;
-    bool            mResetPlaybackHudRequested = false;
+    bool            mResetNowPlayingRequested = false;
     std::chrono::steady_clock::time_point mLastConfigEdit{};
 
     void renderMainWindow();
-    void renderPlaybackHud(const NoteBotPlayer::DisplayState& display);
+    void renderNowPlaying(const NoteBotPlayer::DisplayState& display);
     void renderPlayerTab();
     void renderSettingsTab();
     void renderRenderTab();

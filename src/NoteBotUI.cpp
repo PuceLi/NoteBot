@@ -142,9 +142,9 @@ void NoteBotUI::setPlayer(NoteBotPlayer* player) {
         ImGui::SetWindowPos("Notebot##module", ImVec2(viewport->GetCenter().x - 325.0f,
                                                       viewport->GetCenter().y - 330.0f));
     };
-    actions.resetPlaybackHudPosition = [this] { mResetPlaybackHudRequested = true; };
-    actions.playbackHudVisibilityChanged = [this](bool visible) {
-        mPlayer->getConfig().showPlaybackHud = visible;
+    actions.resetNowPlayingPosition = [this] { mResetNowPlayingRequested = true; };
+    actions.nowPlayingVisibilityChanged = [this](bool visible) {
+        mPlayer->getConfig().showNowPlaying = visible;
         markConfigEdited();
     };
     actions.settingsChanged = [this](const meteor::NotebotSettings&) { applyMeteorSettings(); };
@@ -163,7 +163,7 @@ void NoteBotUI::syncMeteorSettingsFromConfig() {
     if (!mPlayer || !mMeteorUI) return;
     const auto& config = mPlayer->getConfig();
     auto& settings = mMeteorUI->settings;
-    mMeteorUI->showPlaybackHud = config.showPlaybackHud;
+    mMeteorUI->showNowPlaying = config.showNowPlaying;
     settings.tickDelay = config.tickDelay;
     settings.tuneIntervalTicks = config.tuneIntervalTicks;
     settings.mode = config.mode == NoteBotConfig::NotebotMode::Manual ? 1 : 0;
@@ -274,7 +274,7 @@ void NoteBotUI::render() {
         mVisible.store(mMeteorUI->showModule || mMeteorUI->showSongs,
                        std::memory_order_release);
     }
-    if (mPlayer) renderPlaybackHud(mPlayer->getDisplayState());
+    if (mPlayer) renderNowPlaying(mPlayer->getDisplayState());
     if (isVisible() && clickedOutsideImGui())
         setVisible(false);
     if (mConfigDirty && std::chrono::steady_clock::now() - mLastConfigEdit >=
@@ -289,13 +289,13 @@ void NoteBotUI::render() {
     }
 }
 
-void NoteBotUI::renderPlaybackHud(const NoteBotPlayer::DisplayState& display) {
-    if (!display.isPlaying || !mPlayer->getConfig().showPlaybackHud) return;
+void NoteBotUI::renderNowPlaying(const NoteBotPlayer::DisplayState& display) {
+    if (!mPlayer->getConfig().showNowPlaying || (!display.isPlaying && !isVisible())) return;
     const auto* viewport = ImGui::GetMainViewport();
     const auto defaultPosition = ImVec2(viewport->GetCenter().x, viewport->Pos.y + 72.0f);
-    if (mResetPlaybackHudRequested) {
+    if (mResetNowPlayingRequested) {
         ImGui::SetNextWindowPos(defaultPosition, ImGuiCond_Always, ImVec2(0.5f, 0.0f));
-        mResetPlaybackHudRequested = false;
+        mResetNowPlayingRequested = false;
     } else {
         ImGui::SetNextWindowPos(defaultPosition, ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.0f));
     }
@@ -322,7 +322,7 @@ void NoteBotUI::renderPlaybackHud(const NoteBotPlayer::DisplayState& display) {
             const ImVec2 delta = ImGui::GetIO().MouseDelta;
             ImGui::SetWindowPos(ImVec2(pos.x + delta.x, pos.y + delta.y));
         }
-        const char* title = display.songTitle.empty() ? "NoteBot" : display.songTitle.c_str();
+        const char* title = display.songTitle.empty() ? "No song" : display.songTitle.c_str();
         const float titleY = titlePos.y + (ImGui::GetFrameHeight() - ImGui::GetTextLineHeight()) * 0.5f;
         ImGui::GetWindowDrawList()->PushClipRect(titlePos,
             ImVec2(titlePos.x + titleWidth, titlePos.y + ImGui::GetFrameHeight()), true);
@@ -337,15 +337,16 @@ void NoteBotUI::renderPlaybackHud(const NoteBotPlayer::DisplayState& display) {
             ? std::clamp(static_cast<float>(display.currentTick) /
                          static_cast<float>(display.totalTicks), 0.0f, 1.0f)
             : 0.0f;
-        const std::string progressText = std::to_string(display.currentTick) + " / " +
-                                         std::to_string(display.totalTicks);
+        const std::string progressText = display.hasSong
+            ? std::to_string(display.currentTick) + " / " + std::to_string(display.totalTicks)
+            : "No song";
         ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f), progressText.c_str());
     }
     ImGui::End();
     ImGui::PopStyleColor();
     if (hideRequested) {
-        mPlayer->getConfig().showPlaybackHud = false;
-        if (mMeteorUI) mMeteorUI->showPlaybackHud = false;
+        mPlayer->getConfig().showNowPlaying = false;
+        if (mMeteorUI) mMeteorUI->showNowPlaying = false;
         markConfigEdited();
     }
 }
