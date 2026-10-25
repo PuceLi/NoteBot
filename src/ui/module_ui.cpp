@@ -327,7 +327,7 @@ void NotebotUi::drawModule() {
         else if (!wasExpanded && moduleExpanded_)
             ImGui::SetWindowSize(ImVec2(moduleExpandedWidth_,moduleExpandedHeight_));
         if (moduleExpanded_) {
-            ImGui::BeginChild("##config-view",ImVec2(0,ImGui::GetContentRegionAvail().y),false);
+            ImGui::BeginChild("##config-view",ImVec2(0,ImGui::GetContentRegionAvail().y),false,ImGuiWindowFlags_NoScrollbar);
             constexpr float contentPadding=8.0f;
             ImGui::SetCursorPosX(contentPadding);
             ImGui::BeginGroup();
