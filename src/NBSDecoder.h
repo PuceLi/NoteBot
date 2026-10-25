@@ -15,7 +15,8 @@ public:
     static std::optional<Song> decode(const std::filesystem::path& filePath);
 
 private:
-    static int16_t  readShort(std::ifstream& stream);
+    static uint8_t  readByte(std::ifstream& stream);
+    static uint16_t readShort(std::ifstream& stream);
     static int32_t  readInt(std::ifstream& stream);
     static std::string readString(std::ifstream& stream);
     static Instrument fromNBSInstrument(uint8_t instrument);
