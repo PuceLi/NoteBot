@@ -12,6 +12,8 @@
 #include <filesystem>
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
+#include <cstdio>
 #include <iterator>
 #include <string_view>
 #include <windows.h>
@@ -21,6 +23,16 @@ namespace fs = std::filesystem;
 namespace notebot {
 
 namespace {
+std::string formatSongTime(int tick) {
+    const int64_t milliseconds = static_cast<int64_t>(std::max(0, tick)) * 50;
+    char text[32];
+    std::snprintf(text, sizeof(text), "%02lld:%02lld:%03lld",
+                  static_cast<long long>(milliseconds / 60000),
+                  static_cast<long long>(milliseconds / 1000 % 60),
+                  static_cast<long long>(milliseconds % 1000));
+    return text;
+}
+
 bool clickedOutsideImGui() {
     if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left) || !ImGui::IsMousePosValid())
         return false;
@@ -338,7 +350,7 @@ void NoteBotUI::renderNowPlaying(const NoteBotPlayer::DisplayState& display) {
                          static_cast<float>(display.totalTicks), 0.0f, 1.0f)
             : 0.0f;
         const std::string progressText = display.hasSong
-            ? std::to_string(display.currentTick) + " / " + std::to_string(display.totalTicks)
+            ? formatSongTime(display.currentTick) + " / " + formatSongTime(display.totalTicks)
             : "No song";
         ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f), progressText.c_str());
     }
