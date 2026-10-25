@@ -3,6 +3,7 @@
 #include "NoteData.h"
 #include "Config.h"
 #include "NoteBlockManager.h"
+#include "PlaybackClock.h"
 #include <memory>
 #include <filesystem>
 #include <atomic>
@@ -80,7 +81,7 @@ private:
     bool                mIsPlaying   = false;
     bool                mPreviewMode = false;
     int                 mCurrentTick = 0;
-    int                 mTickCounter = 0;
+    PlaybackClock       mPlaybackClock;
     std::chrono::steady_clock::time_point mNextReadyScanTime{};
     bool mAutoRefreshNearby = false;
     NoteBotConfig&      mConfig;

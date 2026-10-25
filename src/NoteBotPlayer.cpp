@@ -74,7 +74,7 @@ void NoteBotPlayer::stopInternal() {
     mIsPlaying   = false;
     mPreviewMode = false;
     mCurrentTick = 0;
-    mTickCounter = 0;
+    mPlaybackClock.reset();
     mStage = Stage::Ready;
     mTuneTargets.clear();
     mAwaitingTuneUpdate = false;
@@ -119,7 +119,7 @@ void NoteBotPlayer::reset() {
     mIsPlaying   = false;
     mPreviewMode = false;
     mCurrentTick = 0;
-    mTickCounter = 0;
+    mPlaybackClock.reset();
     mNextReadyScanTime = {};
     mAutoRefreshNearby = false;
     mNoteBlockManager.clear();
@@ -364,13 +364,17 @@ void NoteBotPlayer::tickInternal() {
     switch (mPendingControl.exchange(ControlRequest::None, std::memory_order_acq_rel)) {
     case ControlRequest::Play:
         if (mStage == Stage::Playing && mSong) {
+            if (!mIsPlaying) mPlaybackClock.reset();
             mIsPlaying = true;
         } else {
             beginTuning();
         }
         break;
     case ControlRequest::Pause:
-        if (mStage == Stage::Playing) mIsPlaying = !mIsPlaying;
+        if (mStage == Stage::Playing) {
+            mIsPlaying = !mIsPlaying;
+            mPlaybackClock.reset();
+        }
         break;
     case ControlRequest::Stop: stopInternal(); break;
     case ControlRequest::None: break;
@@ -413,8 +417,9 @@ void NoteBotPlayer::tickInternal() {
         auto clientRef = ll::service::getClientInstance();
         auto* client = clientRef.has_value() ? &clientRef.value() : nullptr;
         auto* player = client ? client->getLocalPlayer() : nullptr;
-        if (!client || !player) {
+        if (!client || (!mPreviewMode && !player)) {
             mWorldPaused.store(true, std::memory_order_release);
+            mPlaybackClock.reset();
             return;
         }
 
@@ -437,7 +442,11 @@ void NoteBotPlayer::tickInternal() {
             const bool stalled = sameSimulationTick &&
                 std::chrono::steady_clock::now() - mLastSimulationAdvance > std::chrono::milliseconds(500);
             mWorldPaused.store(paused || stalled, std::memory_order_release);
-            if (paused || sameSimulationTick) return;
+            if (paused || stalled) {
+                mPlaybackClock.reset();
+                return;
+            }
+            if (sameSimulationTick) return;
         }
     } else {
         mWorldPaused.store(false, std::memory_order_release);
@@ -449,11 +458,11 @@ void NoteBotPlayer::tickInternal() {
         return;
     }
 
-    if (mStage != Stage::Playing || !mIsPlaying || !mSong) return;
-
-    mTickCounter++;
-    if (mTickCounter < mConfig.tickDelay) return;
-    mTickCounter = 0;
+    if (mStage != Stage::Playing || !mIsPlaying || !mSong) {
+        mPlaybackClock.reset();
+        return;
+    }
+    if (!mPlaybackClock.advance(std::chrono::steady_clock::now(), mConfig.tickDelay)) return;
 
     if (mCurrentTick > mSong->lastTick) {
         if (mConfig.autoPlay && !mPreviewMode) {
@@ -480,16 +489,21 @@ void NoteBotPlayer::playPreviewNotesAtTick(int tick) {
     auto clientRef = ll::service::getClientInstance();
     auto* client = clientRef.has_value() ? &clientRef.value() : nullptr;
     auto* player = client ? client->getLocalPlayer() : nullptr;
-    if (!player) return;
+    if (!client) return;
 
     auto& soundEngine = *client->getSoundEngine();
-    const Vec3& position = player->getPosition();
+    const Vec3 position = player ? player->getPosition() : Vec3{};
     const float volume = 2.0f;
     const auto range = mSong->notesMap.equal_range(tick);
     for (auto it = range.first; it != range.second; ++it) {
         const Note& note = it->second;
         const float pitch = std::pow(2.0f, (static_cast<float>(note.noteLevel) - 12.0f) / 12.0f);
-        soundEngine.play(std::string(previewSoundName(note.instrument)), position, volume, pitch, std::nullopt);
+        const std::string soundName(previewSoundName(note.instrument));
+        if (player) {
+            soundEngine.play(soundName, position, volume, pitch, std::nullopt);
+        } else {
+            soundEngine.playUI(soundName, volume, pitch);
+        }
     }
 }
 
@@ -532,6 +546,7 @@ void NoteBotPlayer::scanAndMapNoteBlocks(BlockSource& blockSource, const BlockPo
     mIsPlaying = false;
     mPreviewMode = false;
     mCurrentTick = 0;
+    mPlaybackClock.reset();
     mNextReadyScanTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
     mAutoRefreshNearby = true;
     mStage = Stage::Ready;
