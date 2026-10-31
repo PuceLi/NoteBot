@@ -71,13 +71,16 @@ bool sanitizeConfig(NoteBotConfig& cfg) {
         cfg.playingMode = defaults.playingMode;
         changed = true;
     }
+    for (int& instrument : cfg.noteMap) {
+        clampInt(instrument, 0, static_cast<int>(kMappedInstrumentCount));
+    }
     clampInt(cfg.checkNoteblocksDelay, 1, 100);
     clampInt(cfg.tickDelay, 0, 20);
     clampInt(cfg.tuneIntervalTicks, 0, 20);
     clampInt(cfg.keybinds.hotkey, 0, 255);
     clampFloat(cfg.noteTextScale, 0.5f, 3.0f, defaults.noteTextScale);
     clampFloat(cfg.noteTextHeight, 0.5f, 2.5f, defaults.noteTextHeight);
-    clampFloat(cfg.boxExpansion, 0.001f, 0.08f, defaults.boxExpansion);
+    clampFloat(cfg.boxExpansion, 0.0f, 0.08f, defaults.boxExpansion);
 
     clampColor(cfg.colors.scannedSide, defaults.colors.scannedSide);
     clampColor(cfg.colors.scannedLine, defaults.colors.scannedLine);
@@ -126,6 +129,7 @@ void loadConfig() {
                     sourceVersion = version != data.end() && version->is_number_integer()
                         ? version->template get<int>() : 0;
                     data.erase("concurrentTuneBlocks");
+                    data.erase("renderBoxThroughWalls");
                     return ll::config::defaultConfigUpdater(defaults, data);
                 });
             if (!currentVersion && !updaterCalled) {
@@ -133,6 +137,18 @@ void loadConfig() {
             }
             if (sourceVersion < 4 && loaded.checkNoteblocksDelay == 100) {
                 loaded.checkNoteblocksDelay = 3;
+            }
+            if (sourceVersion < 9) {
+                // Carry the new defaults forward when an older config still
+                // contains the previous defaults rather than a custom value.
+                if (loaded.checkNoteblocksDelay == 3) loaded.checkNoteblocksDelay = 1;
+                if (loaded.renderBoxLines && !loaded.renderBoxFaces) {
+                    loaded.renderBoxLines = false;
+                    loaded.renderBoxFaces = true;
+                }
+                loaded.showUnmappedBoxes = false;
+                if (std::abs(loaded.boxExpansion - 0.01f) < 0.000001f)
+                    loaded.boxExpansion = 0.0f;
             }
         } catch (const std::exception& error) {
             auto backup = candidate;

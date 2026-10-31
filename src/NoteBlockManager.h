@@ -34,7 +34,7 @@ public:
 
     void scanNearbyNoteBlocks(BlockSource& blockSource, const BlockPos& playerPos,
                               const Vec3& eyePos, int radius);
-    void mapSongToNoteBlocks(const Song& song, bool anyInstrument = false);
+    void mapSongToNoteBlocks(const Song& song, bool anyInstrument, const NoteMap& noteMap);
     void clear();
 
     void tick();
@@ -57,6 +57,8 @@ public:
     struct RequiredNote {
         int instrument;
         int pitch;
+        bool customInstrument = false;
+        int sourceInstrumentId = -1;
     };
     struct MappingDiagnostics {
         size_t required = 0;
@@ -69,7 +71,7 @@ public:
     size_t getNoteBlockCount() const;
     bool hasMapping() const;
     std::unordered_map<int, std::vector<NoteMapping>> getNoteMapping() const;
-    std::vector<NoteMapping> getMappingsAtTick(int tick) const;
+    void getMappingsAtTick(int tick, std::vector<NoteMapping>& output) const;
 
 private:
     mutable std::mutex mMutex;

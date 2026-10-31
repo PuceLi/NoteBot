@@ -6,15 +6,14 @@
 #include "ll/api/service/Bedrock.h"
 #include "mc/client/game/ClientInstance.h"
 #include "mc/client/player/LocalPlayer.h"
+#include "mc/deps/shared_types/v1_26_20/block/NoteBlockInstrumentEnum.h"
 #include <imgui.h>
 #include <imgui_internal.h>
-#include <cstring>
 #include <filesystem>
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
-#include <iterator>
 #include <string_view>
 #include <windows.h>
 
@@ -48,21 +47,15 @@ bool clickedOutsideImGui() {
     return true;
 }
 
-std::string toUtf8(const fs::path& path) {
-    const auto bytes = path.u8string();
-    return {reinterpret_cast<const char*>(bytes.data()), bytes.size()};
-}
-
 fs::path fromUtf8(std::string_view text) {
     return fs::path(std::u8string(text.begin(), text.end()));
 }
 
-const char* instrumentName(int value) {
-    static constexpr const char* names[] = {
-        "Harp", "Bass", "Bass Drum", "Snare", "Hat", "Guitar", "Flute", "Bell",
-        "Chime", "Xylophone", "Iron Xylophone", "Cow Bell", "Didgeridoo", "Bit", "Banjo", "Pling"
-    };
-    return value >= 0 && value < static_cast<int>(std::size(names)) ? names[value] : "Unknown";
+std::string instrumentName(int value) {
+    if (value < 0 || value >= static_cast<int>(Instrument::Size))
+        return "Unrecognized instrument ID " + std::to_string(value);
+    return SharedTypes::v1_26_20::NoteBlockInstrumentEnum::noteBlockInstrumentToString(
+        static_cast<Instrument>(value));
 }
 
 int keyCodeFromName(std::string_view name) {
@@ -108,9 +101,6 @@ NoteBotUI::NoteBotUI() {
     const auto dataSongs = getDataDir() / "songs";
     if (folder.empty() || folder.is_relative()) folder = getDataDir() / folder;
     if (folder.filename() == "songs" && !fs::exists(folder) && fs::exists(dataSongs)) folder = dataSongs;
-    const auto folderString = toUtf8(folder.lexically_normal());
-    strncpy_s(mSongFolderPath, folderString.c_str(), sizeof(mSongFolderPath) - 1);
-    scanSongFolder();
     mMeteorUI = std::make_unique<meteor::NotebotUi>(folder);
 }
 
@@ -135,7 +125,6 @@ void NoteBotUI::setPlayer(NoteBotPlayer* player) {
     if (!mMeteorUI || !mPlayer) return;
     syncMeteorSettingsFromConfig();
     mMeteorUI->keybind = keyNameFromCode(mPlayer->getConfig().keybinds.hotkey);
-    mMeteorUI->active = true;
     auto& actions = mMeteorUI->actions;
     actions.loadSong = [this](const fs::path& path) { mPlayer->loadSong(path); };
     actions.previewSong = [this](const fs::path& path) { mPlayer->previewSong(path); };
@@ -160,6 +149,22 @@ void NoteBotUI::setPlayer(NoteBotPlayer* player) {
         markConfigEdited();
     };
     actions.settingsChanged = [this](const meteor::NotebotSettings&) { applyMeteorSettings(); };
+    actions.animatedColorsChanged = [this](const meteor::NotebotSettings& settings) {
+        if (!mPlayer) return;
+        auto& config = mPlayer->getConfig();
+        config.colors.untunedSide = settings.renderColors[0];
+        config.colors.untunedLine = settings.renderColors[1];
+        config.colors.tunedSide = settings.renderColors[2];
+        config.colors.tunedLine = settings.renderColors[3];
+        config.colors.tuneHitSide = settings.renderColors[4];
+        config.colors.tuneHitLine = settings.renderColors[5];
+        config.colors.scannedSide = settings.renderColors[6];
+        config.colors.scannedLine = settings.renderColors[7];
+        config.colors.playingSide = settings.renderColors[8];
+        config.colors.playingLine = settings.renderColors[9];
+        config.pitchTextColor = settings.renderColors[10];
+        config.remainingTextColor = settings.renderColors[11];
+    };
     actions.bindChanged = [this](const std::string& name) {
         const int code = keyCodeFromName(name);
         if (code < 0) {
@@ -180,6 +185,7 @@ void NoteBotUI::syncMeteorSettingsFromConfig() {
     settings.tuneIntervalTicks = config.tuneIntervalTicks;
     settings.mode = config.mode == NoteBotConfig::NotebotMode::Manual ? 1 : 0;
     settings.playingMode = static_cast<int>(config.playingMode);
+    settings.noteMap = config.noteMap;
     settings.polyphonic = config.polyphonic;
     settings.autoRotate = config.autoRotate;
     settings.autoPlay = config.autoPlay;
@@ -188,8 +194,7 @@ void NoteBotUI::syncMeteorSettingsFromConfig() {
     settings.checkNoteblocksAgainDelay = config.checkNoteblocksDelay;
     settings.renderText = config.renderText;
     settings.renderBoxes = config.renderBoxes;
-    settings.shapeMode = config.renderBoxThroughWalls ? 3
-                       : config.renderBoxLines && config.renderBoxFaces ? 2
+    settings.shapeMode = config.renderBoxLines && config.renderBoxFaces ? 2
                        : config.renderBoxFaces ? 1 : 0;
     settings.noteTextScale = config.noteTextScale;
     settings.noteTextHeight = config.noteTextHeight;
@@ -214,6 +219,7 @@ void NoteBotUI::applyMeteorSettings() {
     config.mode = settings.mode == 1 ? NoteBotConfig::NotebotMode::Manual
                                       : NoteBotConfig::NotebotMode::Auto;
     config.playingMode = static_cast<NoteBotConfig::PlayingMode>(settings.playingMode);
+    config.noteMap = settings.noteMap;
     config.polyphonic = settings.polyphonic;
     config.autoRotate = settings.autoRotate;
     config.autoPlay = settings.autoPlay;
@@ -222,7 +228,6 @@ void NoteBotUI::applyMeteorSettings() {
     config.checkNoteblocksDelay = settings.checkNoteblocksAgainDelay;
     config.renderText = settings.renderText;
     config.renderBoxes = settings.renderBoxes;
-    config.renderBoxThroughWalls = settings.shapeMode == 3;
     config.renderBoxLines = settings.shapeMode == 0 || settings.shapeMode == 2;
     config.renderBoxFaces = settings.shapeMode != 0;
     config.noteTextScale = settings.noteTextScale;
@@ -247,6 +252,7 @@ void NoteBotUI::applyMeteorSettings() {
 
 void NoteBotUI::render() {
     if (!ImGui::GetCurrentContext()) return;
+    if (mMeteorUI) mMeteorUI->updateRainbowColors();
     if (isVisible() && mMeteorUI) {
         if (mOpenModuleRequested.exchange(false, std::memory_order_acq_rel) &&
             !mMeteorUI->showModule && !mMeteorUI->showSongs)
@@ -262,31 +268,31 @@ void NoteBotUI::render() {
             const auto diagnostics = manager.getMappingDiagnostics();
             mMeteorUI->songLoaded = display.hasSong;
             mMeteorUI->playing = display.isPlaying;
-            mMeteorUI->playingMode = !display.hasSong ? meteor::NotebotPlayingMode::None :
-                display.isPreview ? meteor::NotebotPlayingMode::Preview :
-                                    meteor::NotebotPlayingMode::Noteblocks;
             mMeteorUI->currentTick = display.currentTick;
             mMeteorUI->lastTick = display.totalTicks;
             mMeteorUI->songTitle = display.songTitle;
-            mMeteorUI->songAuthor = display.songAuthor;
             mMeteorUI->statusOverride = display.status;
             mMeteorUI->foundNoteBlocks = manager.getNoteBlockCount();
             mMeteorUI->requiredNotes = diagnostics.required;
             mMeteorUI->missingNotes.clear();
             mMeteorUI->missingNotes.reserve(diagnostics.missing.size());
             for (const auto& note : diagnostics.missing) {
-                if (mPlayer->getConfig().mode == NoteBotConfig::NotebotMode::Auto)
+                if (note.customInstrument) {
+                    mMeteorUI->missingNotes.push_back("Custom instrument ID " +
+                        std::to_string(note.instrument) + ", pitch " + std::to_string(note.pitch));
+                } else if (mPlayer->getConfig().mode == NoteBotConfig::NotebotMode::Auto)
                     mMeteorUI->missingNotes.push_back("Pitch " + std::to_string(note.pitch));
                 else
-                    mMeteorUI->missingNotes.push_back(std::string(instrumentName(note.instrument)) +
-                                                       ", pitch " + std::to_string(note.pitch));
+                    mMeteorUI->missingNotes.push_back(instrumentName(note.instrument) +
+                        ", pitch " + std::to_string(note.pitch) + ", NBS ID " +
+                        std::to_string(note.sourceInstrumentId));
             }
         }
         mMeteorUI->draw();
         mVisible.store(mMeteorUI->showModule || mMeteorUI->showSongs,
                        std::memory_order_release);
     }
-    if (mPlayer) renderNowPlaying(mPlayer->getDisplayState());
+    if (mPlayer) renderNowPlaying();
     if (isVisible() && clickedOutsideImGui())
         setVisible(false);
     if (mConfigDirty && std::chrono::steady_clock::now() - mLastConfigEdit >=
@@ -301,8 +307,9 @@ void NoteBotUI::render() {
     }
 }
 
-void NoteBotUI::renderNowPlaying(const NoteBotPlayer::DisplayState& display) {
-    if (!mPlayer->getConfig().showNowPlaying || (!display.isPlaying && !isVisible())) return;
+void NoteBotUI::renderNowPlaying() {
+    if (!mPlayer->getConfig().showNowPlaying || (!mPlayer->isPlaying() && !isVisible())) return;
+    const auto display = mPlayer->getDisplayState();
     const auto* viewport = ImGui::GetMainViewport();
     const auto defaultPosition = ImVec2(viewport->GetCenter().x, viewport->Pos.y + 72.0f);
     if (mResetNowPlayingRequested) {
@@ -366,325 +373,6 @@ void NoteBotUI::renderNowPlaying(const NoteBotPlayer::DisplayState& display) {
 void NoteBotUI::markConfigEdited() {
     mConfigDirty = true;
     mLastConfigEdit = std::chrono::steady_clock::now();
-}
-
-void NoteBotUI::renderMainWindow() {
-    ImGui::SetNextWindowSize(ImVec2(600, 550), ImGuiCond_FirstUseEver);
-
-    bool windowOpen = isVisible();
-    if (!ImGui::Begin("NoteBot", &windowOpen)) {
-        if (!windowOpen) setVisible(false);
-        ImGui::End();
-        return;
-    }
-    if (!windowOpen) setVisible(false);
-
-    if (ImGui::BeginTabBar("NoteBotTabs")) {
-        if (ImGui::BeginTabItem("Player")) {
-            renderPlayerTab();
-            ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Settings")) {
-            renderSettingsTab();
-            ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Render")) {
-            renderRenderTab();
-            ImGui::EndTabItem();
-        }
-
-        ImGui::EndTabBar();
-    }
-
-    ImGui::End();
-}
-
-void NoteBotUI::renderPlayerTab() {
-    if (!mPlayer) {
-        ImGui::TextDisabled("Player not initialized");
-        return;
-    }
-
-    ImGui::SeparatorText("Player Status");
-
-    const auto display = mPlayer->getDisplayState();
-    if (display.hasSong) {
-        ImGui::Text("Song: %s", display.songTitle.c_str());
-        ImGui::Text("Author: %s", display.songAuthor.c_str());
-        ImGui::Text("Status: %s", display.status.c_str());
-
-        if (display.totalTicks > 0) {
-            float progress = static_cast<float>(display.currentTick) /
-                           static_cast<float>(display.totalTicks);
-            ImGui::ProgressBar(progress, ImVec2(-1, 0), "");
-            ImGui::Text("Tick: %d / %d", display.currentTick, display.totalTicks);
-        }
-
-        ImGui::Spacing();
-
-        if (display.isPlaying) {
-            if (ImGui::Button("Pause", ImVec2(80, 0))) {
-                mPlayer->pause();
-            }
-        } else {
-            if (ImGui::Button("Play", ImVec2(80, 0))) {
-                mPlayer->play();
-            }
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Stop", ImVec2(80, 0))) {
-            mPlayer->stop();
-        }
-
-        ImGui::Spacing();
-
-        if (ImGui::Button("Scan NoteBlocks", ImVec2(150, 0))) {
-            mPlayer->requestScanNearbyNoteBlocks(32);
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Scan nearby noteblocks and map them to the song");
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Clear NoteBlocks", ImVec2(150, 0))) {
-            mPlayer->requestClearNoteBlocks();
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Clear all scanned noteblocks and stop rendering");
-        }
-
-        const auto& manager = mPlayer->getNoteBlockManager();
-        ImGui::Text("Found %zu noteblocks", manager.getNoteBlockCount());
-        const auto diagnostics = manager.getMappingDiagnostics();
-        if (diagnostics.required > 0 && diagnostics.missing.empty()) {
-            ImGui::TextColored(ImVec4(0, 1, 0, 1), "All %zu required notes mapped", diagnostics.required);
-        } else if (!diagnostics.missing.empty()) {
-            ImGui::TextColored(ImVec4(1, 0.75f, 0, 1), "Missing %zu of %zu required note blocks",
-                               diagnostics.missing.size(), diagnostics.required);
-            if (ImGui::TreeNode("Missing notes")) {
-                for (const auto& note : diagnostics.missing) {
-                    if (mPlayer->getConfig().mode == NoteBotConfig::NotebotMode::Auto) {
-                        ImGui::BulletText("Pitch %d", note.pitch);
-                    } else {
-                        ImGui::BulletText("%s, pitch %d", instrumentName(note.instrument), note.pitch);
-                    }
-                }
-                ImGui::TreePop();
-            }
-        }
-    } else {
-        ImGui::TextDisabled("No song loaded");
-    }
-
-    ImGui::Spacing();
-    ImGui::SeparatorText("Song Library");
-
-    ImGui::Text("Song Folder:");
-    ImGui::InputText("##folder", mSongFolderPath, sizeof(mSongFolderPath));
-
-    ImGui::SameLine();
-    if (ImGui::Button("Scan")) {
-        scanSongFolder();
-    }
-
-    ImGui::Spacing();
-    ImGui::Text("Songs (%zu):", mSongFiles.size());
-
-    if (mSongFiles.empty()) {
-        ImGui::TextDisabled("No .nbs files found in this folder");
-    }
-
-    ImGui::BeginChild("SongList", ImVec2(0, 200), true);
-
-    for (size_t i = 0; i < mSongFiles.size(); ++i) {
-        const auto& songPath = mSongFiles[i];
-        std::string filename = toUtf8(songPath.filename());
-
-        bool isSelected = (static_cast<int>(i) == mSelectedSongIndex);
-        if (ImGui::Selectable(filename.c_str(), isSelected)) {
-            mSelectedSongIndex = static_cast<int>(i);
-        }
-
-        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
-            loadSelectedSong();
-        }
-    }
-
-    ImGui::EndChild();
-
-    if (mSelectedSongIndex >= 0 && mSelectedSongIndex < static_cast<int>(mSongFiles.size())) {
-        if (ImGui::Button("Load Selected Song")) {
-            loadSelectedSong();
-        }
-    }
-}
-
-void NoteBotUI::renderSettingsTab() {
-    if (!mPlayer) return;
-
-    auto& config = mPlayer->getConfig();
-    bool edited = false;
-
-    ImGui::SeparatorText("Playback Settings");
-
-    edited |= ImGui::SliderInt("Tick Delay", &config.tickDelay, 0, 20);
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Delay between each tick (0 = fastest)");
-    }
-
-    edited |= ImGui::SliderInt("Tune Interval (ticks)", &config.tuneIntervalTicks, 0, 20);
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Extra world ticks between confirmed tuning clicks (0 = fastest)");
-    }
-
-    edited |= ImGui::Checkbox("Polyphonic", &config.polyphonic);
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Play multiple notes at the same time");
-    }
-
-    edited |= ImGui::Checkbox("Auto Rotate", &config.autoRotate);
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Automatically rotate to face noteblocks");
-    }
-
-    edited |= ImGui::Checkbox("Auto Play", &config.autoPlay);
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Automatically loop the song");
-    }
-
-    edited |= ImGui::Checkbox("Transpose Out of Range", &config.transposeOutOfRange);
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Transpose notes that are out of range");
-    }
-
-    edited |= ImGui::Checkbox("Swing Arm", &config.swingArm);
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Swing arm when clicking noteblocks");
-    }
-
-    ImGui::Spacing();
-    ImGui::SeparatorText("Mode Settings");
-
-    const char* notebotModes[] = {"Exact Instruments", "Any Instrument"};
-    int currentMode = static_cast<int>(config.mode);
-    if (ImGui::Combo("Notebot Mode", &currentMode, notebotModes, IM_ARRAYSIZE(notebotModes))) {
-        config.mode = static_cast<NoteBotConfig::NotebotMode>(currentMode);
-        edited = true;
-    }
-
-    const char* playingModes[] = {"Sequential", "Polyphonic"};
-    int currentPlayMode = static_cast<int>(config.playingMode);
-    if (ImGui::Combo("Playing Mode", &currentPlayMode, playingModes, IM_ARRAYSIZE(playingModes))) {
-        config.playingMode = static_cast<NoteBotConfig::PlayingMode>(currentPlayMode);
-        edited = true;
-    }
-
-    ImGui::Spacing();
-    ImGui::SeparatorText("Advanced");
-
-    edited |= ImGui::SliderInt("Final Verify Delay (ticks)", &config.checkNoteblocksDelay, 1, 100);
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Wait after tuning before checking all note blocks (default: 3)");
-    }
-    if (edited) markConfigEdited();
-}
-
-void NoteBotUI::renderRenderTab() {
-    if (!mPlayer) return;
-
-    auto& config = mPlayer->getConfig();
-    bool edited = false;
-    constexpr auto colorFlags = ImGuiColorEditFlags_Float |
-                                ImGuiColorEditFlags_DisplayRGB |
-                                ImGuiColorEditFlags_InputRGB;
-    const auto editColor = [&edited](const char* label, std::array<float, 4>& color) {
-        edited |= ImGui::ColorEdit4(label, color.data(), colorFlags);
-    };
-
-    ImGui::SeparatorText("Render Options");
-
-    edited |= ImGui::Checkbox("Render Text", &config.renderText);
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Show note names above noteblocks");
-    }
-
-    edited |= ImGui::Checkbox("Render Boxes", &config.renderBoxes);
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Show boxes around noteblocks");
-    }
-    edited |= ImGui::Checkbox("Box Lines", &config.renderBoxLines);
-    edited |= ImGui::Checkbox("Box Faces", &config.renderBoxFaces);
-    edited |= ImGui::Checkbox("Show Unmapped Boxes", &config.showUnmappedBoxes);
-    edited |= ImGui::SliderFloat("Box Expansion", &config.boxExpansion, 0.001f, 0.08f, "%.3f");
-
-    edited |= ImGui::SliderFloat("Note Text Scale", &config.noteTextScale, 0.5f, 3.0f);
-    edited |= ImGui::SliderFloat("Note Text Height", &config.noteTextHeight, 0.5f, 2.5f, "%.2f");
-    editColor("Pitch Text Color", config.pitchTextColor);
-    editColor("Remaining Text Color", config.remainingTextColor);
-
-    ImGui::Spacing();
-    ImGui::SeparatorText("Colors");
-
-    ImGui::Text("Scanned Noteblock");
-    editColor("Side##scanned", config.colors.scannedSide);
-    editColor("Line##scanned", config.colors.scannedLine);
-
-    ImGui::Spacing();
-    ImGui::Text("Untuned Noteblock");
-    editColor("Side##untuned", config.colors.untunedSide);
-    editColor("Line##untuned", config.colors.untunedLine);
-
-    ImGui::Spacing();
-    ImGui::Text("Tuned Noteblock");
-    editColor("Side##tuned", config.colors.tunedSide);
-    editColor("Line##tuned", config.colors.tunedLine);
-
-    ImGui::Spacing();
-    ImGui::Text("Tune Hit Noteblock");
-    editColor("Side##hit", config.colors.tuneHitSide);
-    editColor("Line##hit", config.colors.tuneHitLine);
-
-    ImGui::Spacing();
-    ImGui::Text("Playing Noteblock");
-    editColor("Side##playing", config.colors.playingSide);
-    editColor("Line##playing", config.colors.playingLine);
-    if (edited) markConfigEdited();
-}
-
-void NoteBotUI::scanSongFolder() {
-    mSongFiles.clear();
-    mSelectedSongIndex = -1;
-
-    fs::path folder = fromUtf8(mSongFolderPath);
-    if (folder.empty()) return;
-
-    std::error_code ec;
-    if (folder.is_relative()) folder = fs::absolute(folder, ec);
-    if (ec || !fs::is_directory(folder, ec)) return;
-
-    for (fs::directory_iterator it(folder, fs::directory_options::skip_permission_denied, ec), end;
-         it != end && !ec; it.increment(ec)) {
-        const auto& entry = *it;
-        if (!entry.is_regular_file(ec)) continue;
-
-        auto ext = entry.path().extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(),
-                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-        if (ext == ".nbs") mSongFiles.push_back(entry.path());
-    }
-
-    std::sort(mSongFiles.begin(), mSongFiles.end(), [](const fs::path& lhs, const fs::path& rhs) {
-        return lhs.filename().u8string() < rhs.filename().u8string();
-    });
-}
-
-void NoteBotUI::loadSelectedSong() {
-    if (mSelectedSongIndex >= 0 && mSelectedSongIndex < static_cast<int>(mSongFiles.size()) && mPlayer) {
-        mPlayer->loadSong(mSongFiles[mSelectedSongIndex]);
-    }
 }
 
 } // namespace notebot

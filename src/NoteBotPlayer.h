@@ -43,8 +43,8 @@ public:
     void tick();
 
     DisplayState getDisplayState() const;
-    bool isPlaying() const { return getDisplayState().isPlaying; }
-    bool hasSong() const { return getDisplayState().hasSong; }
+    bool isPlaying() const;
+    bool hasSong() const;
     std::string getStatus() const;
     int getCurrentTick() const { return getDisplayState().currentTick; }
     int getTotalTicks() const { return getDisplayState().totalTicks; }
@@ -72,18 +72,23 @@ private:
     struct PendingSong {
         Song song;
         bool preview = false;
+        std::string warning;
     };
 
     std::optional<Song> mSong;
     std::mutex mPendingSongMutex;
     std::optional<PendingSong> mPendingSong;
-    std::atomic<std::shared_ptr<const DisplayState>> mPublishedDisplay;
+    std::optional<std::string> mPendingSongError;
+    mutable std::mutex mDisplayMutex;
+    DisplayState mPublishedDisplay;
     bool                mIsPlaying   = false;
     bool                mPreviewMode = false;
     int                 mCurrentTick = 0;
     PlaybackClock       mPlaybackClock;
     std::chrono::steady_clock::time_point mNextReadyScanTime{};
+    std::chrono::steady_clock::time_point mNextPitchRefreshTime{};
     bool mAutoRefreshNearby = false;
+    std::vector<NoteBlockManager::NoteMapping> mTickMappings;
     NoteBotConfig&      mConfig;
     NoteBlockManager    mNoteBlockManager;
     std::atomic<int>    mPendingScanRadius{-1};
@@ -92,6 +97,8 @@ private:
     std::atomic<bool> mWorldPaused{false};
     uint64_t mLastSimulationTick = 0;
     bool mHasSimulationTick = false;
+    uint64_t mNextWorldPlaybackTick = 0;
+    bool mHasWorldPlaybackTick = false;
     std::chrono::steady_clock::time_point mLastSimulationAdvance;
     std::vector<TuneTarget> mTuneTargets;
     Stage mStage = Stage::Ready;
@@ -106,6 +113,7 @@ private:
     int mTuneDelay = 0;
     int mTuneRetryCount = 0;
     std::string mError;
+    std::string mSongWarning;
 
     void playNotesAtTick(int tick);
     void playPreviewNotesAtTick(int tick);

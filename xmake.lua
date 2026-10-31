@@ -17,7 +17,7 @@ add_requires("minhook", {configs = {shared = false}})
 add_requires("levibuildscript")
 
 if is_plat("windows") then
-    add_syslinks("d3d11", "d3d12", "dxgi", "gdiplus")
+    add_syslinks("d3d11", "d3d12", "dxgi", "gdiplus", "shell32")
 end
 
 if not has_config("vs_runtime") then
@@ -58,6 +58,10 @@ target("NoteBot") -- Change this to your mod name.
         local font = path.join(os.projectdir(), "src", "ui", "Comfortaa.ttf")
         local mod_data = path.join(os.projectdir(), "bin", "NoteBot", "data")
         os.mkdir(mod_data)
+        local mod_lang = path.join(os.projectdir(), "bin", "NoteBot", "lang")
+        os.mkdir(mod_lang)
+        os.cp(path.join(os.projectdir(), "lang", "translations.json"),
+              path.join(mod_lang, "translations.json"))
         os.cp(font, path.join(mod_data, "Comfortaa.ttf"))
         local icons = path.join(mod_data, "ui")
         os.mkdir(icons)

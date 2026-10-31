@@ -58,7 +58,7 @@ void RenderNoteBotUI() {
     if (gRenderer && gPlayer) {
         const auto& config = gPlayer->getConfig();
         gRenderer->render(gPlayer->getNoteBlockManager(), config,
-                          gPlayer->getDisplayState().isPlaying);
+                          gPlayer->isPlaying());
     }
 }
 
@@ -156,7 +156,8 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
     void,
     Packet& packet
 ) {
-    if (packet.getId() == MinecraftPacketIds::PlayerAction) {
+    const bool debugBlockEvents = getConfig().debugBlockEvents;
+    if (debugBlockEvents && packet.getId() == MinecraftPacketIds::PlayerAction) {
         auto& action = static_cast<PlayerActionPacket&>(packet);
         if (action.mAction == PlayerActionType::InteractWithBlock ||
             action.mAction == PlayerActionType::StartItemUseOn ||
@@ -170,7 +171,7 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
             );
         }
     }
-    if (packet.getId() == MinecraftPacketIds::InventoryTransaction) {
+    if (debugBlockEvents && packet.getId() == MinecraftPacketIds::InventoryTransaction) {
         auto& inventoryPacket = static_cast<InventoryTransactionPacket&>(packet);
         if (auto* use = std::get_if<ItemUseInventoryTransaction>(&inventoryPacket.mVariantTransaction.get())) {
             if (use->mActionType == ItemUseInventoryTransaction::ActionType::Use) {

@@ -6,6 +6,7 @@
 #include "ImGuiManager.h"
 
 #include "ll/api/memory/Hook.h"
+#include "ll/api/i18n/I18n.h"
 #include "ll/api/mod/RegisterHelper.h"
 
 #include <imgui.h>
@@ -35,6 +36,9 @@ bool NoteBot::load() {
         logger.error("Failed to load config: {}", e.what());
         return false;
     }
+
+    auto translations = ll::i18n::getInstance().load(getSelf().getLangDir() / "translations.json");
+    if (!translations) logger.warn("Failed to load NoteBot translations");
 
     namespace fs = std::filesystem;
     auto dataDir = getDataDir();

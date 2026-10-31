@@ -1,5 +1,6 @@
 #pragma once
 
+#include "NoteData.h"
 #include <array>
 #include <filesystem>
 #include <string>
@@ -30,7 +31,7 @@ struct KeybindsConfig {
 };
 
 struct NoteBotConfig {
-    int version = 7;
+    int version = 9;
 
     enum class NotebotMode {
         Manual = 0,
@@ -45,18 +46,18 @@ struct NoteBotConfig {
     GeneralConfig general;
     NotebotMode mode = NotebotMode::Manual;
     PlayingMode playingMode = PlayingMode::Polyphonic;
-    int checkNoteblocksDelay = 3;
+    NoteMap noteMap = makeDefaultNoteMap();
+    int checkNoteblocksDelay = 1;
 
     bool renderBoxes = true;
-    bool renderBoxLines = true;
-    bool renderBoxFaces = false;
-    bool renderBoxThroughWalls = false;
-    bool showUnmappedBoxes = true;
+    bool renderBoxLines = false;
+    bool renderBoxFaces = true;
+    bool showUnmappedBoxes = false;
     bool renderText = true;
     bool showNowPlaying = true;
     float noteTextScale = 1.0f;
     float noteTextHeight = 1.3f;
-    float boxExpansion = 0.01f;
+    float boxExpansion = 0.0f;
 
     // 播放配置
     int tickDelay = 0;

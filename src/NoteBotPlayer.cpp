@@ -6,6 +6,7 @@
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/client/sound/SoundEngine.h"
 #include "mc/deps/audio/ServerSoundHandle.h"
+#include "mc/deps/shared_types/v1_26_20/block/NoteBlockInstrumentEnum.h"
 #include "mc/world/level/BlockSource.h"
 #include "mc/world/level/GameType.h"
 #include "mc/world/level/Level.h"
@@ -16,11 +17,16 @@
 
 namespace notebot {
 namespace {
+std::string pathToUtf8(const std::filesystem::path& path) {
+    const auto value = path.u8string();
+    return {reinterpret_cast<const char*>(value.data()), value.size()};
+}
+
 std::string_view previewSoundName(Instrument instrument) {
     switch (instrument) {
     case Instrument::Harp: return "note.harp";
     case Instrument::Bass: return "note.bass";
-    case Instrument::BaseDrum: return "note.bd";
+    case Instrument::BassDrum: return "note.bd";
     case Instrument::Snare: return "note.snare";
     case Instrument::Hat: return "note.hat";
     case Instrument::Guitar: return "note.guitar";
@@ -34,8 +40,46 @@ std::string_view previewSoundName(Instrument instrument) {
     case Instrument::Bit: return "note.bit";
     case Instrument::Banjo: return "note.banjo";
     case Instrument::Pling: return "note.pling";
+    case Instrument::Trumpet: return "note.trumpet";
+    case Instrument::TrumpetExposed: return "note.trumpet_exposed";
+    case Instrument::TrumpetWeathered: return "note.trumpet_weathered";
+    case Instrument::TrumpetOxidized: return "note.trumpet_oxidized";
+    case Instrument::Zombie:
+    case Instrument::Skeleton:
+    case Instrument::Creeper:
+    case Instrument::Dragon:
+    case Instrument::WitherSkeleton:
+    case Instrument::Piglin:
+    case Instrument::None:
+    case Instrument::Size: return {};
     }
-    return "note.harp";
+    return {};
+}
+
+std::string instrumentName(int instrument) {
+    if (instrument < 0 || instrument >= static_cast<int>(Instrument::Size))
+        return "Unrecognized instrument ID " + std::to_string(instrument);
+    return SharedTypes::v1_26_20::NoteBlockInstrumentEnum::noteBlockInstrumentToString(
+        static_cast<Instrument>(instrument));
+}
+
+std::string describeMissingNote(const NoteBlockManager::RequiredNote& missing) {
+    std::string description = "pitch " + std::to_string(missing.pitch);
+    if (missing.pitch < 0 || missing.pitch > 24) {
+        description += " is outside the in-game note-block range 0-24";
+    }
+    if (missing.customInstrument) {
+        description += "; NBS custom instrument ID " + std::to_string(missing.instrument) +
+            " cannot be played because its custom sound is not loaded by NoteBot";
+    } else if (missing.instrument >= static_cast<int>(Instrument::Zombie)) {
+        description += "; " + std::string(instrumentName(missing.instrument)) + " (ID " +
+            std::to_string(missing.instrument) + ") is not a melodic note-block instrument";
+    } else if (missing.instrument >= 0) {
+        description += " (" + std::string(instrumentName(missing.instrument)) + ", NBS ID " +
+            std::to_string(missing.sourceInstrumentId) + ", game instrument ID " +
+            std::to_string(missing.instrument) + ")";
+    }
+    return description;
 }
 }
 
@@ -51,10 +95,60 @@ bool NoteBotPlayer::previewSong(const std::filesystem::path& filePath) {
 }
 
 bool NoteBotPlayer::queueSong(const std::filesystem::path& filePath, bool preview) {
-    auto song = NBSDecoder::decode(filePath);
-    if (!song) return false;
+    auto result = NBSDecoder::decodeWithError(filePath);
     std::lock_guard lock(mPendingSongMutex);
-    mPendingSong = PendingSong{std::move(*song), preview};
+    if (!result.song) {
+        const auto filename = pathToUtf8(filePath.filename());
+        mPendingSong.reset();
+        mPendingSongError = "Could not load \"" + filename + "\": " + result.error;
+        return false;
+    }
+    if (result.song->notesMap.empty()) {
+        const auto filename = pathToUtf8(filePath.filename());
+        mPendingSong.reset();
+        mPendingSongError = "Could not load \"" + filename + "\": no note events were found";
+        return false;
+    }
+
+    std::string warning;
+    size_t unsupportedPitchCount = 0;
+    size_t unsupportedInstrumentCount = 0;
+    int firstPitchTick = -1;
+    int firstPitch = 0;
+    int firstCustomInstrumentTick = -1;
+    int firstCustomInstrument = -1;
+    for (const auto& [tick, note] : result.song->notesMap) {
+        const int pitch = note.noteLevel;
+        if (!preview && (pitch < 0 || pitch > 24)) {
+            if (unsupportedPitchCount == 0) {
+                firstPitchTick = tick;
+                firstPitch = pitch;
+            }
+            ++unsupportedPitchCount;
+        }
+        if (note.customInstrument) {
+            if (unsupportedInstrumentCount == 0) {
+                firstCustomInstrumentTick = tick;
+                firstCustomInstrument = note.sourceInstrumentId;
+            }
+            ++unsupportedInstrumentCount;
+        }
+    }
+    if (unsupportedPitchCount > 0) {
+        warning = std::to_string(unsupportedPitchCount) +
+            " note(s) are outside the in-game note-block pitch range 0-24; first at tick " +
+            std::to_string(firstPitchTick) + " has pitch " + std::to_string(firstPitch);
+    }
+    if (unsupportedInstrumentCount > 0) {
+        if (!warning.empty()) warning += "; ";
+        warning += std::to_string(unsupportedInstrumentCount) + " note(s) use " +
+            "NBS custom instrument ID " + std::to_string(firstCustomInstrument) +
+            "; its custom sound is not loaded by NoteBot (first at tick " +
+            std::to_string(firstCustomInstrumentTick) + ")";
+    }
+
+    mPendingSongError.reset();
+    mPendingSong = PendingSong{std::move(*result.song), preview, std::move(warning)};
     return true;
 }
 
@@ -75,14 +169,17 @@ void NoteBotPlayer::stopInternal() {
     mPreviewMode = false;
     mCurrentTick = 0;
     mPlaybackClock.reset();
+    mNextPitchRefreshTime = {};
     mStage = Stage::Ready;
     mTuneTargets.clear();
     mAwaitingTuneUpdate = false;
     mTuneDelay = 0;
     mTuneRetryCount = 0;
     mError.clear();
+    mSongWarning.clear();
     mWorldPaused.store(false, std::memory_order_release);
     mHasSimulationTick = false;
+    mHasWorldPlaybackTick = false;
 }
 
 void NoteBotPlayer::beginTuning() {
@@ -120,6 +217,7 @@ void NoteBotPlayer::reset() {
     mPreviewMode = false;
     mCurrentTick = 0;
     mPlaybackClock.reset();
+    mNextPitchRefreshTime = {};
     mNextReadyScanTime = {};
     mAutoRefreshNearby = false;
     mNoteBlockManager.clear();
@@ -129,8 +227,10 @@ void NoteBotPlayer::reset() {
     mTuneRetryCount = 0;
     mStage = Stage::Ready;
     mError.clear();
+    mSongWarning.clear();
     mWorldPaused.store(false, std::memory_order_release);
     mHasSimulationTick = false;
+    mHasWorldPlaybackTick = false;
 }
 
 void NoteBotPlayer::prepareTuneTargets() {
@@ -321,14 +421,21 @@ void NoteBotPlayer::tick() {
 
 void NoteBotPlayer::tickInternal() {
     std::optional<PendingSong> nextSong;
+    std::optional<std::string> loadError;
     {
         std::lock_guard lock(mPendingSongMutex);
         nextSong.swap(mPendingSong);
+        loadError.swap(mPendingSongError);
+    }
+    if (loadError) {
+        mError = std::move(*loadError);
+        if (!mSong) mStage = Stage::Error;
     }
     if (nextSong) {
         reset();
         mSong = std::move(nextSong->song);
         mPreviewMode = nextSong->preview;
+        mSongWarning = std::move(nextSong->warning);
         mNextReadyScanTime = {};
         mAutoRefreshNearby = !mPreviewMode;
         if (mPreviewMode) {
@@ -364,7 +471,10 @@ void NoteBotPlayer::tickInternal() {
     switch (mPendingControl.exchange(ControlRequest::None, std::memory_order_acq_rel)) {
     case ControlRequest::Play:
         if (mStage == Stage::Playing && mSong) {
-            if (!mIsPlaying) mPlaybackClock.reset();
+            if (!mIsPlaying) {
+                mPlaybackClock.reset();
+                mHasWorldPlaybackTick = false;
+            }
             mIsPlaying = true;
         } else {
             beginTuning();
@@ -374,6 +484,7 @@ void NoteBotPlayer::tickInternal() {
         if (mStage == Stage::Playing) {
             mIsPlaying = !mIsPlaying;
             mPlaybackClock.reset();
+            mHasWorldPlaybackTick = false;
         }
         break;
     case ControlRequest::Stop: stopInternal(); break;
@@ -401,18 +512,26 @@ void NoteBotPlayer::tickInternal() {
             auto& blockSource = player->getDimensionBlockSource();
             mNoteBlockManager.scanNearbyNoteBlocks(blockSource, BlockPos(player->getPosition()),
                                                     player->getEyePos(), mConfig.general.scanRadius);
-            mNoteBlockManager.mapSongToNoteBlocks(*mSong, mConfig.mode == NoteBotConfig::NotebotMode::Auto);
+            mNoteBlockManager.mapSongToNoteBlocks(*mSong,
+                mConfig.mode == NoteBotConfig::NotebotMode::Auto, mConfig.noteMap);
         }
     }
 
-    if (!mPreviewMode) {
+    const auto pitchRefreshNow = std::chrono::steady_clock::now();
+    const bool activeBlockPlayback = mStage == Stage::Playing && mIsPlaying && !mPreviewMode;
+    if (!mPreviewMode && mStage != Stage::Error &&
+        (!activeBlockPlayback || pitchRefreshNow >= mNextPitchRefreshTime)) {
         if (auto clientRef = ll::service::getClientInstance(); clientRef.has_value()) {
-            if (auto* player = clientRef.value().getLocalPlayer()) {
+            if (auto* player = clientRef.value().getLocalPlayer();
+                player && !clientRef.value().isShowingPauseScreen()) {
                 mNoteBlockManager.refreshPitches(player->getDimensionBlockSource());
+                if (activeBlockPlayback)
+                    mNextPitchRefreshTime = pitchRefreshNow + std::chrono::milliseconds(100);
             }
         }
     }
 
+    bool worldTickAvailable = false;
     if (mStage == Stage::Tuning || mStage == Stage::Verifying || mStage == Stage::Playing) {
         auto clientRef = ll::service::getClientInstance();
         auto* client = clientRef.has_value() ? &clientRef.value() : nullptr;
@@ -420,6 +539,7 @@ void NoteBotPlayer::tickInternal() {
         if (!client || (!mPreviewMode && !player)) {
             mWorldPaused.store(true, std::memory_order_release);
             mPlaybackClock.reset();
+            mHasWorldPlaybackTick = false;
             return;
         }
 
@@ -430,6 +550,7 @@ void NoteBotPlayer::tickInternal() {
             bool paused = client->isShowingPauseScreen() || player->getLevel().getSimPaused();
             bool sameSimulationTick = false;
             if (auto levelRef = ll::service::getLevel(); levelRef.has_value()) {
+                worldTickAvailable = true;
                 paused = paused || levelRef.value().getSimPaused();
                 const uint64_t worldTick = levelRef.value().getCurrentTick().tickID;
                 sameSimulationTick = mHasSimulationTick && worldTick == mLastSimulationTick;
@@ -444,6 +565,7 @@ void NoteBotPlayer::tickInternal() {
             mWorldPaused.store(paused || stalled, std::memory_order_release);
             if (paused || stalled) {
                 mPlaybackClock.reset();
+                mHasWorldPlaybackTick = false;
                 return;
             }
             if (sameSimulationTick) return;
@@ -460,9 +582,23 @@ void NoteBotPlayer::tickInternal() {
 
     if (mStage != Stage::Playing || !mIsPlaying || !mSong) {
         mPlaybackClock.reset();
+        mHasWorldPlaybackTick = false;
         return;
     }
-    if (!mPlaybackClock.advance(std::chrono::steady_clock::now(), mConfig.tickDelay)) return;
+    if (mPreviewMode || !worldTickAvailable) {
+        if (!worldTickAvailable) mHasWorldPlaybackTick = false;
+        if (!mPlaybackClock.advance(std::chrono::steady_clock::now(), mConfig.tickDelay)) return;
+    } else {
+        // In-world playback already has a canonical 20 Hz clock. Using the real-time
+        // clock here as well would add another 50 ms gate on top of each world tick.
+        if (!mHasWorldPlaybackTick) {
+            mNextWorldPlaybackTick = mLastSimulationTick;
+            mHasWorldPlaybackTick = true;
+        }
+        if (mLastSimulationTick < mNextWorldPlaybackTick) return;
+        mNextWorldPlaybackTick = mLastSimulationTick +
+            static_cast<uint64_t>(std::clamp(mConfig.tickDelay, 0, 20) + 1);
+    }
 
     if (mCurrentTick > mSong->lastTick) {
         if (mConfig.autoPlay && !mPreviewMode) {
@@ -497,8 +633,15 @@ void NoteBotPlayer::playPreviewNotesAtTick(int tick) {
     const auto range = mSong->notesMap.equal_range(tick);
     for (auto it = range.first; it != range.second; ++it) {
         const Note& note = it->second;
+        if (note.customInstrument) continue;
+        Instrument instrument = note.instrument;
+        if (mConfig.mode == NoteBotConfig::NotebotMode::Manual) {
+            instrument = mapInstrument(note.sourceInstrumentId, note.instrument, mConfig.noteMap);
+        }
+        const auto sound = previewSoundName(instrument);
+        if (sound.empty()) continue;
         const float pitch = std::pow(2.0f, (static_cast<float>(note.noteLevel) - 12.0f) / 12.0f);
-        const std::string soundName(previewSoundName(note.instrument));
+        const std::string soundName(sound);
         if (player) {
             soundEngine.play(soundName, position, volume, pitch, std::nullopt);
         } else {
@@ -510,8 +653,8 @@ void NoteBotPlayer::playPreviewNotesAtTick(int tick) {
 void NoteBotPlayer::playNotesAtTick(int tick) {
     if (!mSong) return;
 
-    const auto mappings = mNoteBlockManager.getMappingsAtTick(tick);
-    if (mappings.empty()) return;
+    mNoteBlockManager.getMappingsAtTick(tick, mTickMappings);
+    if (mTickMappings.empty()) return;
 
     auto clientRef = ll::service::getClientInstance();
     if (!clientRef.has_value()) return;
@@ -529,7 +672,7 @@ void NoteBotPlayer::playNotesAtTick(int tick) {
 
     auto& blockSource = player->getDimensionBlockSource();
 
-    for (const auto& mapping : mappings) {
+    for (const auto& mapping : mTickMappings) {
         const BlockPos& pos = mapping.blockPos;
 
         if (!NoteBlockInteraction::isNoteBlock(blockSource, pos)) continue;
@@ -554,13 +697,24 @@ void NoteBotPlayer::scanAndMapNoteBlocks(BlockSource& blockSource, const BlockPo
     mTuneTargets.clear();
     mNoteBlockManager.scanNearbyNoteBlocks(blockSource, playerPos, eyePos, radius);
     if (mSong) {
-        mNoteBlockManager.mapSongToNoteBlocks(*mSong, mConfig.mode == NoteBotConfig::NotebotMode::Auto);
+        mNoteBlockManager.mapSongToNoteBlocks(*mSong,
+            mConfig.mode == NoteBotConfig::NotebotMode::Auto, mConfig.noteMap);
     }
 }
 
 NoteBotPlayer::DisplayState NoteBotPlayer::getDisplayState() const {
-    const auto state = mPublishedDisplay.load(std::memory_order_acquire);
-    return state ? *state : DisplayState{};
+    std::lock_guard lock(mDisplayMutex);
+    return mPublishedDisplay;
+}
+
+bool NoteBotPlayer::isPlaying() const {
+    std::lock_guard lock(mDisplayMutex);
+    return mPublishedDisplay.isPlaying;
+}
+
+bool NoteBotPlayer::hasSong() const {
+    std::lock_guard lock(mDisplayMutex);
+    return mPublishedDisplay.hasSong;
 }
 
 std::string NoteBotPlayer::getStatus() const {
@@ -568,23 +722,31 @@ std::string NoteBotPlayer::getStatus() const {
 }
 
 void NoteBotPlayer::publishDisplayState() {
-    auto state = std::make_shared<DisplayState>();
-    state->hasSong = mSong.has_value();
-    state->isPlaying = mIsPlaying;
-    state->isPreview = mPreviewMode;
-    state->currentTick = mCurrentTick;
+    std::lock_guard lock(mDisplayMutex);
+    mPublishedDisplay.hasSong = mSong.has_value();
+    mPublishedDisplay.isPlaying = mIsPlaying;
+    mPublishedDisplay.isPreview = mPreviewMode;
+    mPublishedDisplay.currentTick = mCurrentTick;
     if (mSong) {
-        state->totalTicks = mSong->lastTick;
-        state->songTitle = mSong->title;
-        state->songAuthor = mSong->author;
+        mPublishedDisplay.totalTicks = mSong->lastTick;
+        if (mPublishedDisplay.songTitle != mSong->title) mPublishedDisplay.songTitle = mSong->title;
+        if (mPublishedDisplay.songAuthor != mSong->author) mPublishedDisplay.songAuthor = mSong->author;
+    } else {
+        mPublishedDisplay.totalTicks = 0;
+        mPublishedDisplay.songTitle.clear();
+        mPublishedDisplay.songAuthor.clear();
     }
-    state->status = composeStatus();
-    mPublishedDisplay.store(std::move(state), std::memory_order_release);
+    if (mStage == Stage::Error || !mError.empty()) {
+        if (mPublishedDisplay.status != mError) mPublishedDisplay.status = mError;
+    } else {
+        auto status = composeStatus();
+        if (mPublishedDisplay.status != status) mPublishedDisplay.status = std::move(status);
+    }
 }
 
 std::string NoteBotPlayer::composeStatus() const {
-    if (!mSong) return "No song loaded";
     if (mStage == Stage::Error || !mError.empty()) return mError;
+    if (!mSong) return "No song loaded";
     if (mWorldPaused.load(std::memory_order_acquire)) return "World paused; waiting to resume";
     if (mStage == Stage::Tuning && mTuneIndex < mTuneTargets.size()) {
         const auto& target = mTuneTargets[mTuneIndex];
@@ -596,16 +758,31 @@ std::string NoteBotPlayer::composeStatus() const {
     }
     if (mStage == Stage::Tuning || mStage == Stage::Verifying) return "Checking tuned note blocks";
     if (mIsPlaying) {
-        if (mPreviewMode) return "Previewing";
-        const auto diagnostics = mNoteBlockManager.getMappingDiagnostics();
-        if (diagnostics.mapped == 0) return "Playing silently: no notes mapped";
-        if (!diagnostics.missing.empty()) {
-            return "Playing (skipping " + std::to_string(diagnostics.missing.size()) +
-                   " missing notes)";
+        if (mPreviewMode) {
+            return mSongWarning.empty() ? "Previewing" : "Previewing; " + mSongWarning;
         }
+        const auto diagnostics = mNoteBlockManager.getMappingDiagnostics();
+        if (diagnostics.mapped == 0 && diagnostics.required > 0) {
+            const auto& missing = diagnostics.missing.front();
+            std::string status = "No matching note blocks: 0/" +
+                std::to_string(diagnostics.required) + " note types mapped; " +
+                describeMissingNote(missing);
+            if (!mSongWarning.empty()) status += "; " + mSongWarning;
+            return status;
+        }
+        if (diagnostics.mapped == 0 && !mSongWarning.empty()) return mSongWarning;
+        if (!diagnostics.missing.empty()) {
+            const auto& missing = diagnostics.missing.front();
+            std::string status = "Playing; " + std::to_string(diagnostics.missing.size()) +
+                " note type(s) have no matching note block; " + describeMissingNote(missing);
+            if (!mSongWarning.empty()) status += "; " + mSongWarning;
+            return status;
+        }
+        if (!mSongWarning.empty()) return "Playing; " + mSongWarning;
         return "Playing";
     }
-    if (mCurrentTick > 0) return "Paused";
+    if (mCurrentTick > 0) return mSongWarning.empty() ? "Paused" : "Paused; " + mSongWarning;
+    if (!mSongWarning.empty()) return "Ready; " + mSongWarning;
     return "Ready";
 }
 

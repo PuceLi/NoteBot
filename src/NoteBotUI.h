@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
-#include <vector>
 
 namespace meteor { class NotebotUi; }
 
@@ -30,20 +29,11 @@ private:
     std::atomic<bool> mOpenModuleRequested{false};
     NoteBotPlayer*  mPlayer  = nullptr;
     std::unique_ptr<meteor::NotebotUi> mMeteorUI;
-    std::vector<std::filesystem::path> mSongFiles;
-    int             mSelectedSongIndex = -1;
-    char            mSongFolderPath[256];
     bool            mConfigDirty = false;
     bool            mResetNowPlayingRequested = false;
     std::chrono::steady_clock::time_point mLastConfigEdit{};
 
-    void renderMainWindow();
-    void renderNowPlaying(const NoteBotPlayer::DisplayState& display);
-    void renderPlayerTab();
-    void renderSettingsTab();
-    void renderRenderTab();
-    void scanSongFolder();
-    void loadSelectedSong();
+    void renderNowPlaying();
     void markConfigEdited();
     void syncMeteorSettingsFromConfig();
     void applyMeteorSettings();

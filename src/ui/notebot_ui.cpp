@@ -7,6 +7,9 @@
 #include <cfloat>
 #include <vector>
 
+#include <windows.h>
+#include <shellapi.h>
+
 namespace meteor {
 namespace {
 
@@ -101,11 +104,6 @@ NotebotUi::NotebotUi(std::filesystem::path songsDirectory) : songsDirectory_(std
     refreshSongs();
 }
 
-void NotebotUi::setSongsDirectory(std::filesystem::path directory) {
-    songsDirectory_ = std::move(directory);
-    refreshSongs();
-}
-
 void NotebotUi::refreshSongs() {
     songFiles_.clear();
     std::error_code error;
@@ -128,27 +126,9 @@ void NotebotUi::refreshSongs() {
 
 std::string NotebotUi::getStatus() const {
     if (!statusOverride.empty()) return statusOverride;
-    if (!active) return "Module disabled.";
     if (!songLoaded) return "No song loaded.";
     if (playing) return "Playing song. " + std::to_string(currentTick) + "/" + std::to_string(lastTick);
-    if (stage == NotebotStage::Playing) return "Ready to play.";
-    if (stage == NotebotStage::SetUp || stage == NotebotStage::Tune || stage == NotebotStage::WaitingToCheckNoteblocks)
-        return "Setting up the noteblocks.";
-    switch (stage) {
-    case NotebotStage::LoadingSong: return "Stage: LoadingSong.";
-    case NotebotStage::None: return "Stage: None.";
-    default: return "Stage: Playing.";
-    }
-}
-
-std::string NotebotUi::getInfoString() const {
-    if (stage == NotebotStage::None) return "None";
-    const char* mode = playingMode == NotebotPlayingMode::Preview ? "Preview" :
-        playingMode == NotebotPlayingMode::Noteblocks ? "Noteblocks" : "None";
-    const char* stageName = stage == NotebotStage::LoadingSong ? "LoadingSong" :
-        stage == NotebotStage::SetUp ? "SetUp" : stage == NotebotStage::Tune ? "Tune" :
-        stage == NotebotStage::WaitingToCheckNoteblocks ? "WaitingToCheckNoteblocks" : "Playing";
-    return std::string(mode) + " | " + stageName;
+    return "Ready.";
 }
 
 void NotebotUi::draw() {
@@ -168,7 +148,7 @@ void NotebotUi::drawSongs() {
     const float rowHeight = fontSize + kPad * 2 + kSpacing * 3;
     const float wantedListHeight = songCount == 0 ? fontSize * 3.0f : rowHeight * songCount;
     const float listHeight = std::max(28.0f, std::min(wantedListHeight, std::max(100.0f, ImGui::GetMainViewport()->Size.y - 238.0f)));
-    const float windowHeight = songsExpanded_ ? headerHeight + 8 + (fontSize + kPad * 2) * 2 + kSpacing * 2 + listHeight + 11 : headerHeight;
+    const float windowHeight = songsExpanded_ ? headerHeight + 8 + (fontSize + kPad * 2) * 3 + kSpacing * 3 + listHeight + 11 : headerHeight;
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(416, windowHeight), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSizeConstraints(ImVec2(300, headerHeight), ImVec2(FLT_MAX, FLT_MAX));
@@ -196,7 +176,8 @@ void NotebotUi::drawSongs() {
             ImGui::SetCursorPosX(8);
             ImGui::BeginGroup();
             const float contentWidth = std::max(200.0f, ImGui::GetContentRegionAvail().x - 8.0f);
-            if (meteorButton("Random Song", (contentWidth - 3) / 2)) {
+            const float halfButtonWidth = (contentWidth - 3) / 2;
+            if (meteorButton("Random Song", halfButtonWidth)) {
                 if (!songFiles_.empty() && actions.loadSong) {
                     static std::mt19937 rng(std::random_device{}());
                     std::uniform_int_distribution<size_t> distribution(0, songFiles_.size() - 1);
@@ -206,7 +187,16 @@ void NotebotUi::drawSongs() {
                 }
             }
             ImGui::SameLine(0, 3);
-            if (meteorButton("Refresh", (contentWidth - 3) / 2)) refreshSongs();
+            if (meteorButton("Refresh", halfButtonWidth)) refreshSongs();
+            if (meteorButton("Open Song Folder", contentWidth)) {
+                std::error_code error;
+                if (!std::filesystem::exists(songsDirectory_, error))
+                    std::filesystem::create_directories(songsDirectory_, error);
+                if (!error) {
+                    refreshSongs();
+                    ShellExecuteW(nullptr, L"open", songsDirectory_.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                }
+            }
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(20/255.f, 20/255.f, 20/255.f, 160/255.f));
             ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 1));
             ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4(1, 1, 1, 20/255.f));
@@ -229,7 +219,8 @@ void NotebotUi::drawSongs() {
                 }
             }
             const float listHeight = std::max(28.0f, ImGui::GetContentRegionAvail().y - 8.0f);
-            ImGui::BeginChild("##songs", ImVec2(contentWidth, listHeight), false);
+            ImGui::BeginChild("##songs", ImVec2(contentWidth, listHeight), false,
+                              ImGuiWindowFlags_NoScrollbar);
             for (const auto& path : visibleSongs) {
                     separator(contentWidth);
                     const std::string filename = utf8(path.filename());

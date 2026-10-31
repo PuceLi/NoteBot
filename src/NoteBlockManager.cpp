@@ -7,34 +7,10 @@
 #include "mc/world/level/ChunkPos.h"
 #include <algorithm>
 #include <set>
+#include <tuple>
 #include <unordered_set>
 
 namespace notebot {
-
-namespace {
-int toSongInstrument(SharedTypes::v1_26_20::NoteBlockInstrument instrument) {
-    using GameInstrument = SharedTypes::v1_26_20::NoteBlockInstrument;
-    switch (instrument) {
-    case GameInstrument::Harp: return static_cast<int>(Instrument::Harp);
-    case GameInstrument::Bass: return static_cast<int>(Instrument::Bass);
-    case GameInstrument::BassDrum: return static_cast<int>(Instrument::BaseDrum);
-    case GameInstrument::Snare: return static_cast<int>(Instrument::Snare);
-    case GameInstrument::Hat: return static_cast<int>(Instrument::Hat);
-    case GameInstrument::Guitar: return static_cast<int>(Instrument::Guitar);
-    case GameInstrument::Flute: return static_cast<int>(Instrument::Flute);
-    case GameInstrument::Bell: return static_cast<int>(Instrument::Bell);
-    case GameInstrument::Chime: return static_cast<int>(Instrument::Chime);
-    case GameInstrument::Xylophone: return static_cast<int>(Instrument::Xylophone);
-    case GameInstrument::IronXylophone: return static_cast<int>(Instrument::IronXylophone);
-    case GameInstrument::CowBell: return static_cast<int>(Instrument::CowBell);
-    case GameInstrument::Didgeridoo: return static_cast<int>(Instrument::Didgeridoo);
-    case GameInstrument::Bit: return static_cast<int>(Instrument::Bit);
-    case GameInstrument::Banjo: return static_cast<int>(Instrument::Banjo);
-    case GameInstrument::Pling: return static_cast<int>(Instrument::Pling);
-    default: return -1;
-    }
-}
-}
 
 NoteBlockManager::NoteBlockManager() = default;
 NoteBlockManager::~NoteBlockManager() = default;
@@ -89,23 +65,32 @@ void NoteBlockManager::scanNearbyNoteBlocks(BlockSource& blockSource, const Bloc
     });
 }
 
-void NoteBlockManager::mapSongToNoteBlocks(const Song& song, bool anyInstrument) {
+void NoteBlockManager::mapSongToNoteBlocks(const Song& song, bool anyInstrument,
+                                           const NoteMap& noteMap) {
     std::lock_guard lock(mMutex);
     mNoteMapping.clear();
     mTargetPitches.clear();
     mMappingDiagnostics = {};
     std::map<std::pair<int, int>, size_t> assigned;
-    std::set<std::pair<int, int>> required;
+    std::map<std::tuple<bool, int, int>, int> required;
     std::vector<bool> used(mNoteBlocks.size(), false);
 
     for (const auto& [tick, note] : song.notesMap) {
-        const int instrument = static_cast<int>(note.instrument);
+        const int instrument = static_cast<int>(anyInstrument || note.customInstrument
+            ? note.instrument : mapInstrument(note.sourceInstrumentId, note.instrument, noteMap));
         const int pitch = note.noteLevel;
-        if (pitch < 0 || pitch >= 25) continue;
+        const int requiredInstrument = note.customInstrument
+            ? note.sourceInstrumentId
+            : (anyInstrument ? -1 : instrument);
+        const auto key = std::tuple{note.customInstrument, requiredInstrument, pitch};
+        required.try_emplace(key, note.sourceInstrumentId);
+        // Custom NBS instruments and pitches outside the note-block range cannot be
+        // represented in-game. Keep them in diagnostics rather than silently dropping them.
+        if (note.customInstrument || pitch < 0 || pitch >= 25 || instrument < 0 ||
+            instrument >= static_cast<int>(Instrument::Zombie)) continue;
 
-        const auto key = std::pair{anyInstrument ? -1 : instrument, pitch};
-        required.insert(key);
-        auto found = assigned.find(key);
+        const auto mappingKey = std::pair{anyInstrument ? -1 : instrument, pitch};
+        auto found = assigned.find(mappingKey);
         if (found == assigned.end()) {
             size_t index = mNoteBlocks.size();
             for (size_t i = 0; i < mNoteBlocks.size(); ++i) {
@@ -129,7 +114,7 @@ void NoteBlockManager::mapSongToNoteBlocks(const Song& song, bool anyInstrument)
             }
             if (index == mNoteBlocks.size()) continue;
             used[index] = true;
-            found = assigned.emplace(key, index).first;
+            found = assigned.emplace(mappingKey, index).first;
         }
 
         auto& block = mNoteBlocks[found->second];
@@ -139,9 +124,12 @@ void NoteBlockManager::mapSongToNoteBlocks(const Song& song, bool anyInstrument)
     }
     mMappingDiagnostics.required = required.size();
     mMappingDiagnostics.mapped = assigned.size();
-    for (const auto& [instrument, pitch] : required) {
-        if (!assigned.contains(std::pair{instrument, pitch})) {
-            mMappingDiagnostics.missing.push_back({instrument, pitch});
+    for (const auto& [key, sourceInstrumentId] : required) {
+        const auto& [isCustomInstrument, instrument, pitch] = key;
+        const auto mappingKey = std::pair{isCustomInstrument || anyInstrument ? -1 : instrument, pitch};
+        if (isCustomInstrument || !assigned.contains(mappingKey)) {
+            mMappingDiagnostics.missing.push_back(
+                {instrument, pitch, isCustomInstrument, sourceInstrumentId});
         }
     }
 }
@@ -248,10 +236,11 @@ std::unordered_map<int, std::vector<NoteBlockManager::NoteMapping>> NoteBlockMan
     return mNoteMapping;
 }
 
-std::vector<NoteBlockManager::NoteMapping> NoteBlockManager::getMappingsAtTick(int tick) const {
+void NoteBlockManager::getMappingsAtTick(int tick, std::vector<NoteMapping>& output) const {
     std::lock_guard lock(mMutex);
     const auto found = mNoteMapping.find(tick);
-    return found == mNoteMapping.end() ? std::vector<NoteMapping>{} : found->second;
+    output.clear();
+    if (found != mNoteMapping.end()) output.insert(output.end(), found->second.begin(), found->second.end());
 }
 
 bool NoteBlockManager::isNoteBlockAt(BlockSource& blockSource, const BlockPos& pos) {
@@ -275,7 +264,7 @@ std::optional<NoteBlockInfo> NoteBlockManager::getNoteBlockInfo(BlockSource& blo
 
     // 获取乐器类型
     auto instrument = NoteBlockActor::getInstrument(blockSource, pos);
-    info.instrument = instrument ? toSongInstrument(*instrument) : -1;
+    info.instrument = instrument ? static_cast<int>(*instrument) : -1;
 
     info.isTuned = false;
     info.isHit = false;

@@ -1,33 +1,32 @@
 #pragma once
 
+#include "../NoteData.h"
 #include <filesystem>
 #include <functional>
 #include <string>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <vector>
 
 namespace meteor {
-
-enum class NotebotStage { None, LoadingSong, SetUp, Tune, WaitingToCheckNoteblocks, Playing };
-enum class NotebotPlayingMode { None, Preview, Noteblocks };
 
 struct NotebotSettings {
     int tickDelay = 0;
     int tuneIntervalTicks = 0;
     int mode = 1;                       // 0 AnyInstrument, 1 ExactInstruments
     int playingMode = 1;                // 0 Sequential, 1 Polyphonic
-    int instrumentDetectMode = 0;       // 0 BlockState, 1 BelowBlock
     bool polyphonic = true;
     bool autoRotate = true;
     bool autoPlay = false;
     bool transposeOutOfRange = true;
     bool swingArm = true;
-    int checkNoteblocksAgainDelay = 3;
+    int checkNoteblocksAgainDelay = 1;
     bool renderText = true;
     bool renderBoxes = true;
-    int shapeMode = 0;                  // 0 Lines, 1 Sides, 2 Both, 3 Jelly (X-Ray)
-    std::array<int, 16> noteMap{{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}};
+    int shapeMode = 1;                  // 0 Lines, 1 Sides, 2 Both
+    notebot::NoteMap noteMap = notebot::makeDefaultNoteMap();
+    std::array<bool, 12> rainbowColors{};
     std::array<std::array<float, 4>, 12> renderColors{{
         {{0.8f,0.0f,0.0f,0.12f}}, {{0.8f,0.0f,0.0f,1.0f}},
         {{0.0f,1.0f,0.0f,0.2f}}, {{0.0f,1.0f,0.0f,0.8f}},
@@ -38,8 +37,8 @@ struct NotebotSettings {
     }};
     float noteTextScale = 1.0f;
     float noteTextHeight = 1.3f;
-    float boxExpansion = 0.01f;
-    bool showScannedNoteblocks = true;
+    float boxExpansion = 0.0f;
+    bool showScannedNoteblocks = false;
 };
 
 struct NotebotActions {
@@ -52,11 +51,9 @@ struct NotebotActions {
     std::function<void()> stop;
     std::function<void()> scanNoteBlocks;
     std::function<void()> clearNoteBlocks;
-    std::function<void(bool)> activeChanged;
-    std::function<void(bool)> favoriteChanged;
     std::function<void(const std::string&)> bindChanged;
-    std::function<void(bool, bool)> moduleFlagsChanged;
     std::function<void(const NotebotSettings&)> settingsChanged;
+    std::function<void(const NotebotSettings&)> animatedColorsChanged;
 };
 
 class NotebotUi {
@@ -64,11 +61,8 @@ public:
     explicit NotebotUi(std::filesystem::path songsDirectory);
     NotebotSettings settings;
     NotebotActions actions;
-    NotebotStage stage = NotebotStage::None;
-    NotebotPlayingMode playingMode = NotebotPlayingMode::None;
     bool songLoaded = false;
     std::string songTitle;
-    std::string songAuthor;
     std::string statusOverride;
     size_t foundNoteBlocks = 0;
     size_t requiredNotes = 0;
@@ -77,25 +71,17 @@ public:
     int lastTick = 0;
     bool playing = false;
     bool showNowPlaying = true;
-    bool active = false;
-    bool favorite = false;
-    bool toggleOnBindRelease = false;
-    bool chatFeedback = true;
     std::string keybind = "None";
     bool showSongs = false;
     bool showModule = true;
-    bool scrollModuleToBottom = false;
-    bool scrollColorToBottom = false;
     std::uintptr_t resetIcon = 0;
     std::uintptr_t copyIcon = 0;
     std::uintptr_t pasteIcon = 0;
 
     void draw();
+    void updateRainbowColors();
     std::string getStatus() const;
-    std::string getInfoString() const;
-    void setSongsDirectory(std::filesystem::path directory);
     void refreshSongs();
-    void openColorEditor(int index);
 
 private:
     std::filesystem::path songsDirectory_;
@@ -121,7 +107,7 @@ private:
     bool colorLayoutLoaded_ = false;
     float colorExpandedWidth_ = 416.0f;
     float colorExpandedHeight_ = 650.0f;
-    std::array<bool, 12> rainbowColors_{};
+    std::chrono::steady_clock::time_point lastRainbowUpdate_{};
     bool focusSearch_ = true;
     void drawSongs();
     void drawModule();
