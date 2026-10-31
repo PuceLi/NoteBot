@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adapt LeviLamina v26.51.8
 - Add preview song feature
 - Add nbs file corruption check
-- Keep Now Playing visiable in NoteBot main UI
+- Keep Now Playing visible in NoteBot main UI
 - Fix NoteBot Songs UI style
 - Fix play tick delay in server
 - Remove main menu scrollbar
