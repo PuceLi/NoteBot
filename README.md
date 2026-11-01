@@ -4,7 +4,9 @@ NoteBot is a client-side feature that automatically plays songs by tuning and hi
 
 [![中文](https://img.shields.io/badge/中文-informational?style=for-the-badge)](README_zh.md)
 
-![Preview](preview.png)
+<p align="center">
+  <img src="preview.png" alt="NoteBot" style="max-width: 100%; height: auto;">
+</p>
 
 ---
 
