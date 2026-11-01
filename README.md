@@ -39,7 +39,8 @@ Make sure **LeviLamina** is installed.
 
 ## Project Status
 
-This mod currently has several known issues; feedback is welcome below.
+This mod currently has several known issues.
+Feedback is welcome below.
 
 ## Third-Party Credits
 

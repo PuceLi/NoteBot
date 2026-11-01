@@ -26,7 +26,7 @@ NoteBot 是一个可以加载的 NBS（Noteblock Studio）文件弹奏音符盒�
 
 - 首次启动后，将 `.nbs` 文件放入 `./mods/NoteBot/data/songs`
 - 进入世界，站在一组音符盒旁边，按 `L` 打开界面（可在界面中自定义按键绑定）
-- 点击按键绑定区域正上方的 **Open Song GUI**，打开歌曲列表
+- 点击 UI 下方的 **Open Song GUI**，打开歌曲列表
 - 点击想要演奏的歌曲旁边的 **Load**
 - 返回主界面，点击 **Scan NoteBlocks**，然后点击 **Play** 开始演奏
 
@@ -39,7 +39,7 @@ NoteBot 是一个可以加载的 NBS（Noteblock Studio）文件弹奏音符盒�
 
 ## 项目状态
 
-此模组目前仍有一些已知问题，欢迎在下方反馈
+此模组目前仍有很多未知的问题，欢迎在下方反馈
 
 由于开发精力有限，该项目更新会比较慢
 

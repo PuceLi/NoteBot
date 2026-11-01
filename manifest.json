@@ -4,6 +4,6 @@
     "version": "${modVersion}",
     "type": "native",
 	"author": "PuceLi",
-    "description": "NoteBot, but in LeviLamina",
+    "description": "NoteBot, but in the LeviLamina",
     "platform": "${modPlatform}"
 }
