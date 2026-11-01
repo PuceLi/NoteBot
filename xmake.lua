@@ -55,18 +55,19 @@ target("NoteBot") -- Change this to your mod name.
     add_files("src/**.cpp")
     add_includedirs("src")
     after_build(function (target)
-        local font = path.join(os.projectdir(), "src", "ui", "Comfortaa.ttf")
+        local ui_assets = path.join(os.projectdir(), "assets", "ui")
+        local font = path.join(ui_assets, "Comfortaa.ttf")
         local mod_data = path.join(os.projectdir(), "bin", "NoteBot", "data")
         os.mkdir(mod_data)
         local mod_lang = path.join(os.projectdir(), "bin", "NoteBot", "lang")
         os.mkdir(mod_lang)
-        os.cp(path.join(os.projectdir(), "lang", "translations.json"),
+        os.cp(path.join(os.projectdir(), "assets", "lang", "translations.json"),
               path.join(mod_lang, "translations.json"))
         os.cp(font, path.join(mod_data, "Comfortaa.ttf"))
         local icons = path.join(mod_data, "ui")
         os.mkdir(icons)
         for _, icon in ipairs({"reset.png", "copy.png", "paste.png"}) do
-            os.cp(path.join(os.projectdir(), "src", "ui", "assets", icon),
+            os.cp(path.join(ui_assets, "assets", icon),
                   path.join(icons, icon))
         end
     end)

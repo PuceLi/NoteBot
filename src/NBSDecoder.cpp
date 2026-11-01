@@ -1,9 +1,11 @@
 #include "NBSDecoder.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <string_view>
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -12,6 +14,8 @@
 
 namespace notebot {
 namespace {
+
+constexpr std::string_view replacementCharacter = "\xEF\xBF\xBD";
 
 std::string normalizeTextEncoding(std::string text) {
     if (text.empty() || text.size() > static_cast<size_t>(std::numeric_limits<int>::max())) return text;
@@ -207,24 +211,49 @@ std::string NBSDecoder::readString(std::ifstream& stream, int nbsVersion) {
                 continuationCount = 3;
                 codepoint = first & 0x07;
             } else {
-                throw std::runtime_error("Invalid UTF-8 in NBS v6 string");
+                // Bad metadata must not prevent the note data from being used.
+                // Consume one declared character and emit valid UTF-8 for ImGui.
+                result.append(replacementCharacter);
+                continue;
             }
 
-            result.push_back(static_cast<char>(first));
+            std::array<uint8_t, 3> continuationBytes{};
+            int consumedContinuations = 0;
+            bool valid = true;
             for (int index = 0; index < continuationCount; ++index) {
                 const uint8_t continuation = readByte(stream);
                 if ((continuation & 0xC0) != 0x80) {
-                    throw std::runtime_error("Invalid UTF-8 in NBS v6 string");
+                    // This byte may be the start of the next character. Put it
+                    // back so the declared character count remains aligned.
+                    stream.clear();
+                    stream.seekg(-1, std::ios::cur);
+                    valid = false;
+                    break;
                 }
-                result.push_back(static_cast<char>(continuation));
+                continuationBytes[static_cast<size_t>(index)] = continuation;
+                ++consumedContinuations;
                 codepoint = (codepoint << 6) | (continuation & 0x3F);
             }
+
             if ((continuationCount == 1 && codepoint < 0x80) ||
                 (continuationCount == 2 && codepoint < 0x800) ||
                 (continuationCount == 3 && codepoint < 0x10000) ||
-                (codepoint >= 0xD800 && codepoint <= 0xDFFF) || codepoint > 0x10FFFF) {
-                throw std::runtime_error("Invalid UTF-8 in NBS v6 string");
+                (codepoint >= 0xD800 && codepoint <= 0xDFFF) || codepoint > 0x10FFFF ||
+                (first == 0xE0 && continuationBytes[0] < 0xA0) ||
+                (first == 0xED && continuationBytes[0] >= 0xA0) ||
+                (first == 0xF0 && continuationBytes[0] < 0x90) ||
+                (first == 0xF4 && continuationBytes[0] >= 0x90)) {
+                valid = false;
             }
+
+            if (!valid) {
+                result.append(replacementCharacter);
+                continue;
+            }
+
+            result.push_back(static_cast<char>(first));
+            for (int index = 0; index < consumedContinuations; ++index)
+                result.push_back(static_cast<char>(continuationBytes[static_cast<size_t>(index)]));
         }
     } else {
         const auto start = stream.tellg();
