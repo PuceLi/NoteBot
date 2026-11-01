@@ -4,8 +4,10 @@ NoteBot 是一个可以加载的 NBS（Noteblock Studio）文件弹奏音符盒�
 
 [![English](https://img.shields.io/badge/English-informational?style=for-the-badge)](README.md)
 
+<p align="center">
+  <img src="preview.png" alt="NoteBot" style="max-width: 100%; height: auto;">
+</p>
 
-![Preview](preview.png)
 ---
 
 ## 安装
