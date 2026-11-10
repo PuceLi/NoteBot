@@ -12,39 +12,42 @@ NoteBot is a client-side feature that automatically plays songs by tuning and hi
 
 ## Installation
 
-Make sure **LeviLamina** is installed.
+Make sure the **LeviLamina** dependency is installed.
 
-### LIP
+### Installing with LIP
 
 `lip install github.com/PuceLi/NoteBot`
 
 ### Manual Installation
 
 - Download `NoteBot-client-windows-x64.zip` from [Releases](https://github.com/PuceLi/NoteBot/releases).
-- Use **LeviLauncher** or extract the files to `/path/to/your/mods/dir`.
+- Install via **LeviLauncher**, or extract the files into `/path/to/your/mods`.
 - Launch the game.
 
 ## Usage
 
-### First-Time Use
+### Preparing Songs
 
-- After launching for the first time, place `.nbs` files into `./mods/NoteBot/data/songs`.
-- Enter a world, stand next to a cluster of note blocks, and press `L` to open the interface (keybinds can be customized in the UI).
-- Click **Open Song GUI** right above the keybind section to bring up the song list.
-- Click **Load** next to the song you want to play.
-- Return to the main screen, click **Scan NoteBlocks**, and then click **Play** to start playing.
+1. On the main interface, click **Open Song List** → **Open Song Folder**, then place your `.nbs` files into the folder.
+2. Once added, click **Refresh** to update the list.
 
-> There will be a brief verification period after tuning; this is expected behavior and will be optimized in the future.
+### Loading & Playing
 
-### Switching Songs
+1. Enter a world, stand near the note blocks you want to use, and switch to Survival Mode.
+2. Press `L` to open the NoteBot interface (the hotkey can be rebound under **Keybindings**).
+3. Click **Open Song List**, find your song, and click **Load**.
+4. Return to the main menu and click **Play**. The mod will scan nearby note blocks, match the required pitches (tuning them beforehand if necessary), and begin playing.
 
-- Click **Clear NoteBlocks** to unload the current song.
-- Select a new song and click **Load** to load it.
+You can also click **Scan Note Blocks** first to verify nearby block matching. The song status will display the number of available note blocks and any missing notes; expand **Missing Notes** to view the specific missing pitches.
+
+### Previewing Songs
+
+Click **Play** directly in the song list to preview a song without needing to enter a world.
 
 ## Project Status
 
 This mod currently has several known issues.
-Feedback is welcome below.
+[Issue](https://github.com/PuceLi/NoteBot/issues) is welcome below.
 
 ## Third-Party Credits
 

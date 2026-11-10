@@ -91,7 +91,7 @@
   "notebot.ui.open_song_gui": "打开歌曲列表",
   "notebot.ui.align_center": "居中窗口",
   "notebot.ui.pause": "暂停",
-  "notebot.ui.play": "播放",
+  "notebot.ui.play": "弹奏",
   "notebot.ui.stop": "停止",
   "notebot.ui.song": "歌曲：{0}",
   "notebot.ui.note_blocks": "音符盒：{0}",
