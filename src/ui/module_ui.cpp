@@ -235,7 +235,7 @@ bool enumRow(const char* label, const char* description, int& value, int def, co
 }
 
 bool colorRow(const char* label, const char* description, std::array<float,4>& value,
-              const std::array<float,4>& def, float width, bool& openEditor) {
+              const std::array<float,4>& def, bool& rainbowEnabled, float width, bool& openEditor) {
     Row row=beginRow(label,description,width);
     const ImVec2 p=ImGui::GetCursorScreenPos();
     ImGui::InvisibleButton("##swatch",ImVec2(32,32));
@@ -245,7 +245,7 @@ bool colorRow(const char* label, const char* description, std::array<float,4>& v
     ImGui::SameLine(0,3);
     if (button("Edit",46)) openEditor=true;
     bool changed=false;
-    if (resetAt(row)) { value=def; changed=true; }
+    if (resetAt(row)) { value=def; rainbowEnabled=false; changed=true; }
     finishRow(row); return changed;
 }
 
@@ -397,7 +397,7 @@ void NotebotUi::drawModule() {
                 static constexpr const char* names[]={"Untuned Side Color","Untuned Line Color","Tuned Side Color","Tuned Line Color","Hit Side Color","Hit Line Color","Scanned Side Color","Scanned Line Color","Playing Side Color","Playing Line Color","Pitch Text Color","Remaining Text Color"};
                 for (int i=0;i<12;++i) {
                     bool openEditor=false;
-                    changed |= colorRow(names[i],"Noteblock render color",settings.renderColors[size_t(i)],defaults.renderColors[size_t(i)],width,openEditor);
+                    changed |= colorRow(names[i],"Noteblock render color",settings.renderColors[size_t(i)],defaults.renderColors[size_t(i)],settings.rainbowColors[size_t(i)],width,openEditor);
                     if (openEditor) editingColor_=i;
                 }
                 changed |= floatRow("Note Text Scale","Scale of note text.",settings.noteTextScale,defaults.noteTextScale,0.5f,3.0f,width);
