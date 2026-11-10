@@ -359,7 +359,14 @@ void NoteBotUI::renderNowPlaying() {
         const std::string progressText = display.hasSong
             ? formatSongTime(display.currentTick) + " / " + formatSongTime(display.totalTicks)
             : "No song";
-        ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f), progressText.c_str());
+        ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f), "");
+        const ImVec2 barMin = ImGui::GetItemRectMin();
+        const ImVec2 barMax = ImGui::GetItemRectMax();
+        const ImVec2 textSize = ImGui::CalcTextSize(progressText.c_str());
+        const ImVec2 textPos((barMin.x + barMax.x - textSize.x) * 0.5f,
+                             (barMin.y + barMax.y - textSize.y) * 0.5f);
+        ImGui::GetWindowDrawList()->AddText(
+            textPos, ImGui::GetColorU32(ImGuiCol_Text), progressText.c_str());
     }
     ImGui::End();
     ImGui::PopStyleColor();
