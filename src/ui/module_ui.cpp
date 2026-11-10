@@ -1,8 +1,9 @@
 #include "notebot_ui.h"
-#include "ll/api/i18n/I18n.h"
+#include "translation.h"
 #include "mc/deps/shared_types/v1_26_20/block/NoteBlockInstrumentEnum.h"
 
 #include <imgui.h>
+#include <fmt/format.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -24,18 +25,7 @@ constexpr float resetButtonWidth = 30.0f;
 constexpr float rowControlGap = 6.0f;
 std::array<std::uintptr_t,3> iconTextures{};
 
-std::string translate(std::string_view key, std::string_view fallback) {
-    const auto& i18n = ll::i18n::getInstance();
-    const std::string_view locale = ll::i18n::getDefaultLocaleCode();
-    auto value = i18n.get(key, locale);
-    if (value.empty() || value == key) {
-        const auto separator = locale.find_first_of("-_");
-        if (separator != std::string_view::npos)
-            value = i18n.get(key, locale.substr(0, separator));
-    }
-    if (value.empty() || value == key) value = i18n.get(key, "en");
-    return value.empty() || value == key ? std::string(fallback) : std::string(value);
-}
+using notebot::ui::translate;
 
 std::string instrumentLabel(notebot::Instrument instrument) {
     const int index = static_cast<int>(instrument);
@@ -417,11 +407,18 @@ void NotebotUi::drawModule() {
             if (songLoaded) {
                 ImGui::Text("Song: %s", songTitle.c_str());
                 ImGui::Text("Note blocks: %zu", foundNoteBlocks);
-                if (requiredNotes > 0 && missingNotes.empty())
-                    ImGui::Text("All %zu required notes mapped", requiredNotes);
+                if (requiredNotes > 0 && missingNotes.empty()) {
+                    const auto text = fmt::format(fmt::runtime(translate(
+                        "notebot.missing.all_mapped", "All {0} required notes mapped")), requiredNotes);
+                    ImGui::TextUnformatted(text.c_str());
+                }
                 else if (!missingNotes.empty()) {
-                    ImGui::Text("Missing %zu of %zu required notes", missingNotes.size(), requiredNotes);
-                    if (ImGui::TreeNode("Missing notes")) {
+                    const auto text = fmt::format(fmt::runtime(translate(
+                        "notebot.missing.summary", "Missing {0} of {1} required notes")),
+                        missingNotes.size(), requiredNotes);
+                    ImGui::TextUnformatted(text.c_str());
+                    const auto title = translate("notebot.missing.title", "Missing notes");
+                    if (ImGui::TreeNode("##missing-notes", "%s", title.c_str())) {
                         for (const auto& note : missingNotes) ImGui::BulletText("%s", note.c_str());
                         ImGui::TreePop();
                     }
