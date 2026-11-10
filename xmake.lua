@@ -61,8 +61,8 @@ target("NoteBot") -- Change this to your mod name.
         os.mkdir(mod_data)
         local mod_lang = path.join(os.projectdir(), "bin", "NoteBot", "lang")
         os.mkdir(mod_lang)
-        os.cp(path.join(os.projectdir(), "assets", "lang", "translations.json"),
-              path.join(mod_lang, "translations.json"))
+        os.rm(path.join(mod_lang, "translations.json"))
+        os.cp(path.join(os.projectdir(), "assets", "lang", "*.json"), mod_lang)
         os.cp(font, path.join(mod_data, "Comfortaa.ttf"))
         local icons = path.join(mod_data, "ui")
         os.mkdir(icons)
