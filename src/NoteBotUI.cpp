@@ -49,10 +49,6 @@ bool clickedOutsideImGui() {
     return true;
 }
 
-fs::path fromUtf8(std::string_view text) {
-    return fs::path(std::u8string(text.begin(), text.end()));
-}
-
 std::string instrumentName(int value) {
     if (value < 0 || value >= static_cast<int>(Instrument::Size))
         return fmt::format(fmt::runtime(ui::translate(
@@ -103,11 +99,7 @@ std::string keyNameFromCode(int code) {
 }
 
 NoteBotUI::NoteBotUI() {
-    auto folder = fromUtf8(getConfig().general.songFolder);
-    const auto dataSongs = getDataDir() / "songs";
-    if (folder.empty() || folder.is_relative()) folder = getDataDir() / folder;
-    if (folder.filename() == "songs" && !fs::exists(folder) && fs::exists(dataSongs)) folder = dataSongs;
-    mMeteorUI = std::make_unique<meteor::NotebotUi>(folder);
+    mMeteorUI = std::make_unique<meteor::NotebotUi>(getSongDir());
 }
 
 NoteBotUI::~NoteBotUI() = default;

@@ -42,8 +42,7 @@ bool NoteBot::load() {
 
     namespace fs = std::filesystem;
     auto dataDir = getDataDir();
-    auto& cfg = getConfig();
-    auto songDir = dataDir / cfg.general.songFolder;
+    auto songDir = getSongDir();
 
     if (!fs::exists(dataDir)) {
         fs::create_directories(dataDir);

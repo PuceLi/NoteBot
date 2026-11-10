@@ -7,6 +7,7 @@
 #include <optional>
 
 class LocalPlayer;
+class Actor;
 class BlockSource;
 class NoteBlockActor;
 
@@ -16,7 +17,9 @@ class NoteBlockInteraction {
 public:
     static Vec2 calculateRotation(const Vec3& playerPos, const BlockPos& blockPos);
 
-    static void setBodyRotation(LocalPlayer* player, const Vec2& rotation);
+    static void setRenderRotation(LocalPlayer* player, const Vec2& rotation);
+    static void updateAutoRotation(LocalPlayer* player);
+    static void clearRenderRotation();
 
     static bool tuneNoteBlock(LocalPlayer* player, const BlockPos& pos, bool swingArm = true);
 

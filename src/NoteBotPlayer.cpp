@@ -421,7 +421,7 @@ void NoteBotPlayer::tickTuning() {
     if (mConfig.autoRotate) {
         const auto rotation = NoteBlockInteraction::calculateRotation(
             player->getPosition(), mTuneTargets[mTuneIndex].pos);
-        NoteBlockInteraction::setBodyRotation(player, rotation);
+        NoteBlockInteraction::setRenderRotation(player, rotation);
     }
     if (mTunePitchBefore < 0 ||
         !NoteBlockInteraction::tuneNoteBlock(player, mTuneTargets[mTuneIndex].pos, false)) {
@@ -694,15 +694,17 @@ void NoteBotPlayer::playNotesAtTick(int tick) {
 
     auto& blockSource = player->getDimensionBlockSource();
 
+    bool renderRotationSet = false;
     for (const auto& mapping : mTickMappings) {
         const BlockPos& pos = mapping.blockPos;
 
         if (!NoteBlockInteraction::isNoteBlock(blockSource, pos)) continue;
         int currentPitch = mNoteBlockManager.getCachedPitch(pos);
         if (currentPitch != mapping.requiredPitch) continue;
-        if (mConfig.autoRotate) {
+        if (mConfig.autoRotate && !renderRotationSet) {
             const auto rotation = NoteBlockInteraction::calculateRotation(player->getPosition(), pos);
-            NoteBlockInteraction::setBodyRotation(player, rotation);
+            NoteBlockInteraction::setRenderRotation(player, rotation);
+            renderRotationSet = true;
         }
         if (!NoteBlockInteraction::playNoteBlock(player, pos, mConfig.swingArm)) continue;
 

@@ -1,5 +1,6 @@
 #include "NoteBlockInteraction.h"
 #include "mc/client/player/LocalPlayer.h"
+#include "mc/world/actor/Actor.h"
 #include "mc/world/level/BlockSource.h"
 #include "mc/world/level/block/Block.h"
 #include "mc/world/level/block/NoteBlock.h"
@@ -34,6 +35,33 @@ PosKey key(const BlockPos& pos) { return {pos.x, pos.y, pos.z}; }
 std::mutex noteEventsMutex;
 std::unordered_map<PosKey, NoteEvent, PosKeyHash> noteEvents;
 uint64_t lastNoteEventSerial = 0;
+std::mutex renderRotationMutex;
+LocalPlayer* renderRotationPlayer = nullptr;
+Vec2 renderRotation{};
+std::chrono::steady_clock::time_point renderRotationExpires{};
+std::chrono::steady_clock::time_point lastRotationUpdate{};
+float smoothedBodyYaw = 0.0f;
+float smoothedHeadYaw = 0.0f;
+bool hasSmoothedRotation = false;
+
+float wrapYaw(float yaw) {
+    while (yaw <= -180.0f) yaw += 360.0f;
+    while (yaw > 180.0f) yaw -= 360.0f;
+    return yaw;
+}
+
+float approachYaw(float current, float target, float maxStep) {
+    const float difference = wrapYaw(target - current);
+    if (std::abs(difference) <= maxStep) return wrapYaw(target);
+    return wrapYaw(current + std::copysign(maxStep, difference));
+}
+
+void applyMobYaw(LocalPlayer& player, float bodyYaw, float headYaw) {
+    // Update only the live values. The paired setters also overwrite Bedrock's
+    // previous-frame values and disable the renderer's normal interpolation.
+    player.setYBodyRotation(bodyYaw);
+    player.setYHeadRot(headYaw);
+}
 }
 
 void NoteBlockInteraction::recordNoteEvent(const BlockPos& pos, int pitch) {
@@ -78,11 +106,69 @@ Vec2 NoteBlockInteraction::calculateRotation(const Vec3& playerPos, const BlockP
     return Vec2{pitch, yaw};
 }
 
-void NoteBlockInteraction::setBodyRotation(LocalPlayer* player, const Vec2& rotation) {
+void NoteBlockInteraction::setRenderRotation(LocalPlayer* player, const Vec2& rotation) {
     if (!player) return;
+    std::lock_guard lock(renderRotationMutex);
+    if (renderRotationPlayer != player) {
+        hasSmoothedRotation = false;
+    }
+    renderRotationPlayer = player;
+    renderRotation = rotation;
+    // Keep a note's visible turn for five game ticks at 20 TPS, even when
+    // playback advances every tick or several notes share one tick.
+    renderRotationExpires = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
+}
 
-    // 设置旋转
-    player->setRotationWrapped(rotation);
+void NoteBlockInteraction::updateAutoRotation(LocalPlayer* player) {
+    std::lock_guard lock(renderRotationMutex);
+    if (!renderRotationPlayer) return;
+    if (player != renderRotationPlayer) {
+        renderRotationPlayer = nullptr;
+        hasSmoothedRotation = false;
+        return;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    const float nativeBodyYaw = player->getYBodyRotation();
+    const float nativeHeadYaw = player->getYHeadRot();
+    if (!hasSmoothedRotation) {
+        smoothedBodyYaw = nativeBodyYaw;
+        smoothedHeadYaw = nativeHeadYaw;
+        lastRotationUpdate = now;
+        hasSmoothedRotation = true;
+    }
+
+    const float elapsed = std::clamp(
+        std::chrono::duration<float>(now - lastRotationUpdate).count(), 0.0f, 0.1f);
+    lastRotationUpdate = now;
+
+    float bodyTarget = renderRotation.y;
+    float headTarget = renderRotation.y;
+    if (now >= renderRotationExpires) {
+        bodyTarget = nativeBodyYaw;
+        headTarget = nativeHeadYaw;
+    }
+
+    // Limit angular speed and always take the shortest path, so rapid changes
+    // between note blocks cannot snap the model back and forth.
+    smoothedBodyYaw = approachYaw(smoothedBodyYaw, bodyTarget, 360.0f * elapsed);
+    smoothedHeadYaw = approachYaw(smoothedHeadYaw, headTarget, 540.0f * elapsed);
+    if (now >= renderRotationExpires &&
+        std::abs(wrapYaw(nativeBodyYaw - smoothedBodyYaw)) < 1.0f &&
+        std::abs(wrapYaw(nativeHeadYaw - smoothedHeadYaw)) < 1.0f) {
+        // The input tick already installed the live camera angles; relinquish
+        // control only after the smoothed model has caught up with them.
+        renderRotationPlayer = nullptr;
+        hasSmoothedRotation = false;
+        return;
+    }
+    applyMobYaw(*player, smoothedBodyYaw, smoothedHeadYaw);
+}
+
+void NoteBlockInteraction::clearRenderRotation() {
+    std::lock_guard lock(renderRotationMutex);
+    renderRotationPlayer = nullptr;
+    renderRotationExpires = {};
+    hasSmoothedRotation = false;
 }
 
 bool NoteBlockInteraction::tuneNoteBlock(LocalPlayer* player, const BlockPos& pos, bool swingArm) {
