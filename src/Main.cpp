@@ -37,7 +37,7 @@ bool NoteBot::load() {
         return false;
     }
 
-    auto translations = ll::i18n::getInstance().load(getSelf().getLangDir() / "translations.json");
+    auto translations = ll::i18n::getInstance().load(getSelf().getLangDir());
     if (!translations) logger.warn("Failed to load NoteBot translations");
 
     namespace fs = std::filesystem;

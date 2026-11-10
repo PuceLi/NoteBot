@@ -1,6 +1,8 @@
 #include "notebot_ui.h"
+#include "translation.h"
 
 #include <imgui.h>
+#include <fmt/format.h>
 #include <algorithm>
 #include <cctype>
 #include <random>
@@ -126,9 +128,10 @@ void NotebotUi::refreshSongs() {
 
 std::string NotebotUi::getStatus() const {
     if (!statusOverride.empty()) return statusOverride;
-    if (!songLoaded) return "No song loaded.";
-    if (playing) return "Playing song. " + std::to_string(currentTick) + "/" + std::to_string(lastTick);
-    return "Ready.";
+    if (!songLoaded) return notebot::ui::translate("notebot.status.no_song", "No song loaded.");
+    if (playing) return notebot::ui::format("notebot.status.playing_song",
+        "Playing song. {0}/{1}", currentTick, lastTick);
+    return notebot::ui::translate("notebot.status.ready", "Ready.");
 }
 
 void NotebotUi::draw() {
@@ -166,7 +169,8 @@ void NotebotUi::drawSongs() {
             songsExpandedWidth_ = ImGui::GetWindowSize().x;
             songsExpandedHeight_ = ImGui::GetWindowSize().y;
         }
-        header("Notebot Songs", songsExpanded_);
+        const auto songsTitle = notebot::ui::translate("notebot.ui.songs_title", "Notebot Songs");
+        header(songsTitle.c_str(), songsExpanded_);
         if (wasExpanded && !songsExpanded_) {
             ImGui::SetWindowSize(ImVec2(songsExpandedWidth_, headerHeight));
         } else if (!wasExpanded && songsExpanded_) {
@@ -177,7 +181,8 @@ void NotebotUi::drawSongs() {
             ImGui::BeginGroup();
             const float contentWidth = std::max(200.0f, ImGui::GetContentRegionAvail().x - 8.0f);
             const float halfButtonWidth = (contentWidth - 3) / 2;
-            if (meteorButton("Random Song", halfButtonWidth)) {
+            const auto randomSong = notebot::ui::translate("notebot.ui.random_song", "Random Song");
+            if (meteorButton(randomSong.c_str(), halfButtonWidth)) {
                 if (!songFiles_.empty() && actions.loadSong) {
                     static std::mt19937 rng(std::random_device{}());
                     std::uniform_int_distribution<size_t> distribution(0, songFiles_.size() - 1);
@@ -187,8 +192,10 @@ void NotebotUi::drawSongs() {
                 }
             }
             ImGui::SameLine(0, 3);
-            if (meteorButton("Refresh", halfButtonWidth)) refreshSongs();
-            if (meteorButton("Open Song Folder", contentWidth)) {
+            const auto refresh = notebot::ui::translate("notebot.ui.refresh", "Refresh");
+            if (meteorButton(refresh.c_str(), halfButtonWidth)) refreshSongs();
+            const auto openFolder = notebot::ui::translate("notebot.ui.open_song_folder", "Open Song Folder");
+            if (meteorButton(openFolder.c_str(), contentWidth)) {
                 std::error_code error;
                 if (!std::filesystem::exists(songsDirectory_, error))
                     std::filesystem::create_directories(songsDirectory_, error);
@@ -204,7 +211,8 @@ void NotebotUi::drawSongs() {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kPad, kPad));
             ImGui::SetNextItemWidth(contentWidth);
             if (focusSearch_) { ImGui::SetKeyboardFocusHere(); focusSearch_ = false; }
-            if (ImGui::InputTextWithHint("##song-search", "Search for the songs...", searchBuffer_, sizeof(searchBuffer_))) filter_ = searchBuffer_;
+            const auto searchHint = notebot::ui::translate("notebot.ui.search_hint", "Search for the songs...");
+            if (ImGui::InputTextWithHint("##song-search", searchHint.c_str(), searchBuffer_, sizeof(searchBuffer_))) filter_ = searchBuffer_;
             if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { searchBuffer_[0] = '\0'; filter_.clear(); }
             ImGui::PopStyleVar(2);
             ImGui::PopStyleColor(3);
@@ -221,33 +229,39 @@ void NotebotUi::drawSongs() {
             const float listHeight = std::max(28.0f, ImGui::GetContentRegionAvail().y - 8.0f);
             ImGui::BeginChild("##songs", ImVec2(contentWidth, listHeight), false,
                               ImGuiWindowFlags_NoScrollbar);
+            const auto load = notebot::ui::translate("notebot.ui.load", "Load");
+            const auto preview = notebot::ui::translate("notebot.ui.preview", "Preview");
             for (const auto& path : visibleSongs) {
                     separator(contentWidth);
                     const std::string filename = utf8(path.filename());
                     ImGui::PushID(filename.c_str());
                     const std::string name = utf8(path.stem());
                     ImGui::TextUnformatted(name.c_str());
-                    const float loadWidth = ImGui::CalcTextSize("Load").x + 12;
-                    const float previewWidth = ImGui::CalcTextSize("Preview").x + 12;
+                    const float loadWidth = ImGui::CalcTextSize(load.c_str()).x + 12;
+                    const float previewWidth = ImGui::CalcTextSize(preview.c_str()).x + 12;
                     ImGui::SameLine(contentWidth - loadWidth - previewWidth - 3);
-                    if (meteorButton("Preview") && actions.previewSong) {
+                    if (meteorButton(preview.c_str()) && actions.previewSong) {
                         actions.previewSong(path);
                         showSongs = false;
                         showModule = true;
                     }
                     ImGui::SameLine(contentWidth - loadWidth);
-                    if (meteorButton("Load") && actions.loadSong) {
+                    if (meteorButton(load.c_str()) && actions.loadSong) {
                         actions.loadSong(path);
                         showSongs = false;
                         showModule = true;
                     }
                     ImGui::PopID();
             }
-            if (!exists) ImGui::TextUnformatted("Song folder is missing.");
+            if (!exists) {
+                const auto missingFolder = notebot::ui::translate("notebot.ui.song_folder_missing",
+                    "Song folder is missing.");
+                ImGui::TextUnformatted(missingFolder.c_str());
+            }
             if (visibleSongs.empty()) {
-                const char* empty = "No songs found.";
-                ImGui::SetCursorPosX((contentWidth - ImGui::CalcTextSize(empty).x) / 2.0f);
-                ImGui::TextUnformatted(empty);
+                const auto empty = notebot::ui::translate("notebot.ui.no_songs", "No songs found.");
+                ImGui::SetCursorPosX((contentWidth - ImGui::CalcTextSize(empty.c_str()).x) / 2.0f);
+                ImGui::TextUnformatted(empty.c_str());
             }
             ImGui::EndChild();
             ImGui::EndGroup();

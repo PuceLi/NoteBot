@@ -1,6 +1,7 @@
 #include "NoteBotPlayer.h"
 #include "NBSDecoder.h"
 #include "NoteBlockInteraction.h"
+#include "ui/translation.h"
 #include "ll/api/service/Bedrock.h"
 #include "mc/client/game/ClientInstance.h"
 #include "mc/client/player/LocalPlayer.h"
@@ -58,26 +59,32 @@ std::string_view previewSoundName(Instrument instrument) {
 
 std::string instrumentName(int instrument) {
     if (instrument < 0 || instrument >= static_cast<int>(Instrument::Size))
-        return "Unrecognized instrument ID " + std::to_string(instrument);
-    return SharedTypes::v1_26_20::NoteBlockInstrumentEnum::noteBlockInstrumentToString(
+        return ui::format("notebot.missing.unknown_instrument", "Unrecognized instrument ID {0}", instrument);
+    const auto fallback = SharedTypes::v1_26_20::NoteBlockInstrumentEnum::noteBlockInstrumentToString(
         static_cast<Instrument>(instrument));
+    auto name = ui::translate("notebot.instrument." + std::to_string(instrument), fallback);
+    std::replace(name.begin(), name.end(), '_', ' ');
+    return name;
 }
 
 std::string describeMissingNote(const NoteBlockManager::RequiredNote& missing) {
-    std::string description = "pitch " + std::to_string(missing.pitch);
-    if (missing.pitch < 0 || missing.pitch > 24) {
-        description += " is outside the in-game note-block range 0-24";
-    }
+    const bool outOfRange = missing.pitch < 0 || missing.pitch > 24;
+    std::string description = outOfRange
+        ? ui::format("notebot.status.missing.pitch_out_of_range",
+            "pitch {0} is outside the in-game note-block range 0-24", missing.pitch)
+        : ui::format("notebot.status.missing.pitch", "pitch {0}", missing.pitch);
     if (missing.customInstrument) {
-        description += "; NBS custom instrument ID " + std::to_string(missing.instrument) +
-            " cannot be played because its custom sound is not loaded by NoteBot";
+        return ui::format("notebot.status.missing.custom",
+            "{0}; NBS custom instrument ID {1} cannot be played because its custom sound is not loaded by NoteBot",
+            description, missing.instrument);
     } else if (missing.instrument >= static_cast<int>(Instrument::Zombie)) {
-        description += "; " + std::string(instrumentName(missing.instrument)) + " (ID " +
-            std::to_string(missing.instrument) + ") is not a melodic note-block instrument";
+        return ui::format("notebot.status.missing.non_melodic",
+            "{0}; {1} (ID {2}) is not a melodic note-block instrument",
+            description, instrumentName(missing.instrument), missing.instrument);
     } else if (missing.instrument >= 0) {
-        description += " (" + std::string(instrumentName(missing.instrument)) + ", NBS ID " +
-            std::to_string(missing.sourceInstrumentId) + ", game instrument ID " +
-            std::to_string(missing.instrument) + ")";
+        return ui::format("notebot.status.missing.instrument",
+            "{0} ({1}, NBS ID {2}, game instrument ID {3})",
+            description, instrumentName(missing.instrument), missing.sourceInstrumentId, missing.instrument);
     }
     return description;
 }
@@ -100,13 +107,15 @@ bool NoteBotPlayer::queueSong(const std::filesystem::path& filePath, bool previe
     if (!result.song) {
         const auto filename = pathToUtf8(filePath.filename());
         mPendingSong.reset();
-        mPendingSongError = "Could not load \"" + filename + "\": " + result.error;
+        mPendingSongError = ui::format("notebot.error.load_song",
+            "Could not load \"{0}\": {1}", filename, result.error);
         return false;
     }
     if (result.song->notesMap.empty()) {
         const auto filename = pathToUtf8(filePath.filename());
         mPendingSong.reset();
-        mPendingSongError = "Could not load \"" + filename + "\": no note events were found";
+        mPendingSongError = ui::format("notebot.error.no_note_events",
+            "Could not load \"{0}\": no note events were found", filename);
         return false;
     }
 
@@ -135,16 +144,15 @@ bool NoteBotPlayer::queueSong(const std::filesystem::path& filePath, bool previe
         }
     }
     if (unsupportedPitchCount > 0) {
-        warning = std::to_string(unsupportedPitchCount) +
-            " note(s) are outside the in-game note-block pitch range 0-24; first at tick " +
-            std::to_string(firstPitchTick) + " has pitch " + std::to_string(firstPitch);
+        warning = ui::format("notebot.warning.out_of_range",
+            "{0} note(s) are outside the in-game note-block pitch range 0-24; first at tick {1} has pitch {2}",
+            unsupportedPitchCount, firstPitchTick, firstPitch);
     }
     if (unsupportedInstrumentCount > 0) {
         if (!warning.empty()) warning += "; ";
-        warning += std::to_string(unsupportedInstrumentCount) + " note(s) use " +
-            "NBS custom instrument ID " + std::to_string(firstCustomInstrument) +
-            "; its custom sound is not loaded by NoteBot (first at tick " +
-            std::to_string(firstCustomInstrumentTick) + ")";
+        warning += ui::format("notebot.warning.custom_instruments",
+            "{0} note(s) use NBS custom instrument ID {1}; its custom sound is not loaded by NoteBot (first at tick {2})",
+            unsupportedInstrumentCount, firstCustomInstrument, firstCustomInstrumentTick);
     }
 
     mPendingSongError.reset();
@@ -187,7 +195,7 @@ void NoteBotPlayer::beginTuning() {
     if (mStage == Stage::Tuning || mStage == Stage::Verifying) return;
     if (mSong->notesMap.empty()) {
         mStage = Stage::Error;
-        mError = "Song has no playable notes";
+        mError = ui::translate("notebot.error.no_playable_notes", "Song has no playable notes");
         return;
     }
     if (mPreviewMode) {
@@ -199,7 +207,7 @@ void NoteBotPlayer::beginTuning() {
     auto* player = clientRef.has_value() ? clientRef.value().getLocalPlayer() : nullptr;
     if (!player) {
         mStage = Stage::Error;
-        mError = "No active world for playing";
+        mError = ui::translate("notebot.error.no_world_playing", "No active world for playing");
         return;
     }
     scanAndMapNoteBlocks(player->getDimensionBlockSource(), BlockPos(player->getPosition()),
@@ -256,12 +264,14 @@ void NoteBotPlayer::prepareTuneTargets() {
 
 bool NoteBotPlayer::refreshTuneTarget(TuneTarget& target, BlockSource& blockSource) {
     if (!NoteBlockInteraction::isNoteBlock(blockSource, target.pos)) {
-        mError = "A mapped note block is no longer available";
+        mError = ui::translate("notebot.error.mapped_block_unavailable",
+            "A mapped note block is no longer available");
         return false;
     }
     const int current = NoteBlockInteraction::getNoteBlockPitch(blockSource, target.pos);
     if (current < 0 || current >= 25) {
-        mError = "A mapped note block is no longer available";
+        mError = ui::translate("notebot.error.mapped_block_unavailable",
+            "A mapped note block is no longer available");
         return false;
     }
     mNoteBlockManager.updateNoteBlockPitch(target.pos, current);
@@ -272,12 +282,12 @@ bool NoteBotPlayer::refreshTuneTarget(TuneTarget& target, BlockSource& blockSour
 bool NoteBotPlayer::updateTuneTargets() {
     auto clientRef = ll::service::getClientInstance();
     if (!clientRef.has_value()) {
-        mError = "No active world for tuning";
+        mError = ui::translate("notebot.error.no_world_tuning", "No active world for tuning");
         return false;
     }
     auto* player = clientRef.value().getLocalPlayer();
     if (!player) {
-        mError = "No local player for tuning";
+        mError = ui::translate("notebot.error.no_player_tuning", "No local player for tuning");
         return false;
     }
     auto& blockSource = player->getDimensionBlockSource();
@@ -294,7 +304,8 @@ void NoteBotPlayer::tickTuning() {
         auto* player = clientRef.has_value() ? clientRef.value().getLocalPlayer() : nullptr;
         if (!player) {
             mStage = Stage::Error;
-            mError = "No local player while verifying tuning";
+            mError = ui::translate("notebot.error.no_player_verifying",
+                "No local player while verifying tuning");
             return;
         }
         int pitch = NoteBlockInteraction::getNoteBlockPitch(
@@ -307,7 +318,7 @@ void NoteBotPlayer::tickTuning() {
         }
         if (pitch < 0) {
             mStage = Stage::Error;
-            mError = "Note block disappeared while tuning";
+            mError = ui::translate("notebot.error.block_disappeared", "Note block disappeared while tuning");
             return;
         }
         if (pitch == mTunePitchBefore) {
@@ -321,11 +332,12 @@ void NoteBotPlayer::tickTuning() {
                 const auto& pos = mTuneTargets[mTuneIndex].pos;
                 const auto delta = pos.center() - player->getPosition();
                 const auto distance = std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
-                mError = "Tuning ignored at (" + std::to_string(pos.x) + "," +
-                    std::to_string(pos.y) + "," + std::to_string(pos.z) +
-                    "), distance " + std::to_string(distance) +
-                    ", event " + (NoteBlockInteraction::noteEventPitch(pos, mTuneEventSerialBefore)
-                        ? "unchanged" : "none");
+                mError = ui::format("notebot.error.tuning_ignored",
+                    "Tuning ignored at ({0},{1},{2}), distance {3}, event {4}",
+                    pos.x, pos.y, pos.z, distance,
+                    NoteBlockInteraction::noteEventPitch(pos, mTuneEventSerialBefore)
+                        ? ui::translate("notebot.status.event_unchanged", "unchanged")
+                        : ui::translate("notebot.status.event_none", "none"));
             }
             return;
         }
@@ -355,13 +367,15 @@ void NoteBotPlayer::tickTuning() {
                 mIsPlaying = true;
             } else {
                 mStage = Stage::Ready;
-                mError = "Tuned. Switch to survival and press Play";
+                mError = ui::translate("notebot.status.tuned_switch_to_survival",
+                    "Tuned. Switch to survival and press Play");
             }
             return;
         }
         if (++mTunePasses >= 3) {
             mStage = Stage::Error;
-            mError = "Tuning did not update the note blocks";
+            mError = ui::translate("notebot.error.tuning_no_update",
+                "Tuning did not update the note blocks");
             return;
         }
         mStage = Stage::Tuning;
@@ -383,7 +397,7 @@ void NoteBotPlayer::tickTuning() {
     auto* player = clientRef.has_value() ? clientRef.value().getLocalPlayer() : nullptr;
     if (!player) {
         mStage = Stage::Error;
-        mError = "No local player for tuning";
+        mError = ui::translate("notebot.error.no_player_tuning", "No local player for tuning");
         return;
     }
     auto& blockSource = player->getDimensionBlockSource();
@@ -412,7 +426,8 @@ void NoteBotPlayer::tickTuning() {
     if (mTunePitchBefore < 0 ||
         !NoteBlockInteraction::tuneNoteBlock(player, mTuneTargets[mTuneIndex].pos, false)) {
         mStage = Stage::Error;
-        mError = "Could not interact with a note block for tuning";
+        mError = ui::translate("notebot.error.tuning_interaction",
+            "Could not interact with a note block for tuning");
         return;
     }
     mAwaitingTuneUpdate = true;
@@ -446,7 +461,7 @@ void NoteBotPlayer::tickInternal() {
         if (mPreviewMode) {
             if (mSong->notesMap.empty()) {
                 mStage = Stage::Error;
-                mError = "Song has no playable notes";
+                mError = ui::translate("notebot.error.no_playable_notes", "Song has no playable notes");
             } else {
                 mStage = Stage::Playing;
                 mIsPlaying = true;
@@ -502,7 +517,8 @@ void NoteBotPlayer::tickInternal() {
         if (player && player->getPlayerGameType() != GameType::Survival) {
             mIsPlaying = false;
             mStage = Stage::Error;
-            mError = "Playing note blocks requires survival mode";
+            mError = ui::translate("notebot.error.survival_required",
+                "Playing note blocks requires survival mode");
             mWorldPaused.store(false, std::memory_order_release);
             return;
         }
@@ -671,7 +687,8 @@ void NoteBotPlayer::playNotesAtTick(int tick) {
     if (player->getPlayerGameType() != GameType::Survival) {
         mIsPlaying = false;
         mStage = Stage::Error;
-        mError = "Playing note blocks requires survival mode";
+        mError = ui::translate("notebot.error.survival_required",
+            "Playing note blocks requires survival mode");
         return;
     }
 
@@ -755,44 +772,60 @@ void NoteBotPlayer::publishDisplayState() {
 
 std::string NoteBotPlayer::composeStatus() const {
     if (mStage == Stage::Error || !mError.empty()) return mError;
-    if (!mSong) return "No song loaded";
-    if (mWorldPaused.load(std::memory_order_acquire)) return "World paused; waiting to resume";
+    if (!mSong) return ui::translate("notebot.status.no_song_loaded", "No song loaded");
+    if (mWorldPaused.load(std::memory_order_acquire))
+        return ui::translate("notebot.status.world_paused", "World paused; waiting to resume");
     if (mStage == Stage::Tuning && mTuneIndex < mTuneTargets.size()) {
         const auto& target = mTuneTargets[mTuneIndex];
         const int current = mNoteBlockManager.getCachedPitch(target.pos);
-        return "Tuning " + std::to_string(mTuneIndex + 1) + "/" +
-            std::to_string(mTuneTargets.size()) + ": " + std::to_string(current) +
-            " -> " + std::to_string(target.targetPitch) +
-            " (" + std::to_string(target.remainingHits) + " clicks left)";
+        return ui::format("notebot.status.tuning",
+            "Tuning {0}/{1}: {2} -> {3} ({4} clicks left)",
+            mTuneIndex + 1, mTuneTargets.size(), current, target.targetPitch, target.remainingHits);
     }
-    if (mStage == Stage::Tuning || mStage == Stage::Verifying) return "Checking tuned note blocks";
+    if (mStage == Stage::Tuning || mStage == Stage::Verifying)
+        return ui::translate("notebot.status.checking_tuning", "Checking tuned note blocks");
     if (mIsPlaying) {
         if (mPreviewMode) {
-            return mSongWarning.empty() ? "Previewing" : "Previewing; " + mSongWarning;
+            return mSongWarning.empty()
+                ? ui::translate("notebot.status.previewing", "Previewing")
+                : ui::format("notebot.status.previewing_warning", "Previewing; {0}", mSongWarning);
         }
         const auto diagnostics = mNoteBlockManager.getMappingDiagnostics();
         if (diagnostics.mapped == 0 && diagnostics.required > 0) {
             const auto& missing = diagnostics.missing.front();
-            std::string status = "No matching note blocks: 0/" +
-                std::to_string(diagnostics.required) + " note types mapped; " +
-                describeMissingNote(missing);
-            if (!mSongWarning.empty()) status += "; " + mSongWarning;
-            return status;
+            const auto missingDescription = describeMissingNote(missing);
+            if (!mSongWarning.empty()) {
+                return ui::format("notebot.status.no_matching_blocks_warning",
+                    "No matching note blocks: 0/{0} note types mapped; {1}; {2}",
+                    diagnostics.required, missingDescription, mSongWarning);
+            }
+            return ui::format("notebot.status.no_matching_blocks",
+                "No matching note blocks: 0/{0} note types mapped; {1}",
+                diagnostics.required, missingDescription);
         }
         if (diagnostics.mapped == 0 && !mSongWarning.empty()) return mSongWarning;
         if (!diagnostics.missing.empty()) {
             const auto& missing = diagnostics.missing.front();
-            std::string status = "Playing; " + std::to_string(diagnostics.missing.size()) +
-                " note type(s) have no matching note block; " + describeMissingNote(missing);
-            if (!mSongWarning.empty()) status += "; " + mSongWarning;
-            return status;
+            const auto missingDescription = describeMissingNote(missing);
+            if (!mSongWarning.empty()) {
+                return ui::format("notebot.status.playing_missing_warning",
+                    "Playing; {0} note type(s) have no matching note block; {1}; {2}",
+                    diagnostics.missing.size(), missingDescription, mSongWarning);
+            }
+            return ui::format("notebot.status.playing_missing",
+                "Playing; {0} note type(s) have no matching note block; {1}",
+                diagnostics.missing.size(), missingDescription);
         }
-        if (!mSongWarning.empty()) return "Playing; " + mSongWarning;
-        return "Playing";
+        if (!mSongWarning.empty())
+            return ui::format("notebot.status.playing_warning", "Playing; {0}", mSongWarning);
+        return ui::translate("notebot.status.playing", "Playing");
     }
-    if (mCurrentTick > 0) return mSongWarning.empty() ? "Paused" : "Paused; " + mSongWarning;
-    if (!mSongWarning.empty()) return "Ready; " + mSongWarning;
-    return "Ready";
+    if (mCurrentTick > 0)
+        return mSongWarning.empty() ? ui::translate("notebot.status.paused", "Paused")
+            : ui::format("notebot.status.paused_warning", "Paused; {0}", mSongWarning);
+    if (!mSongWarning.empty())
+        return ui::format("notebot.status.ready_warning", "Ready; {0}", mSongWarning);
+    return ui::translate("notebot.status.ready_short", "Ready");
 }
 
 } // namespace notebot

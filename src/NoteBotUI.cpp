@@ -349,7 +349,8 @@ void NoteBotUI::renderNowPlaying() {
             const ImVec2 delta = ImGui::GetIO().MouseDelta;
             ImGui::SetWindowPos(ImVec2(pos.x + delta.x, pos.y + delta.y));
         }
-        const char* title = display.songTitle.empty() ? "No song" : display.songTitle.c_str();
+        const auto noSong = ui::translate("notebot.ui.no_song", "No song");
+        const char* title = display.songTitle.empty() ? noSong.c_str() : display.songTitle.c_str();
         const float titleY = titlePos.y + (ImGui::GetFrameHeight() - ImGui::GetTextLineHeight()) * 0.5f;
         ImGui::GetWindowDrawList()->PushClipRect(titlePos,
             ImVec2(titlePos.x + titleWidth, titlePos.y + ImGui::GetFrameHeight()), true);
@@ -366,7 +367,7 @@ void NoteBotUI::renderNowPlaying() {
             : 0.0f;
         const std::string progressText = display.hasSong
             ? formatSongTime(display.currentTick) + " / " + formatSongTime(display.totalTicks)
-            : "No song";
+            : noSong;
         ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f), "");
         const ImVec2 barMin = ImGui::GetItemRectMin();
         const ImVec2 barMax = ImGui::GetItemRectMax();
