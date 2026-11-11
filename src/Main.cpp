@@ -37,13 +37,12 @@ bool NoteBot::load() {
         return false;
     }
 
-    auto translations = ll::i18n::getInstance().load(getSelf().getLangDir() / "translations.json");
+    auto translations = ll::i18n::getInstance().load(getSelf().getLangDir());
     if (!translations) logger.warn("Failed to load NoteBot translations");
 
     namespace fs = std::filesystem;
     auto dataDir = getDataDir();
-    auto& cfg = getConfig();
-    auto songDir = dataDir / cfg.general.songFolder;
+    auto songDir = getSongDir();
 
     if (!fs::exists(dataDir)) {
         fs::create_directories(dataDir);

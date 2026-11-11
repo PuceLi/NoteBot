@@ -24,6 +24,16 @@ std::filesystem::path getDataDir() {
     return NoteBot::getInstance().getSelf().getDataDir();
 }
 
+std::filesystem::path getSongDir() {
+    auto folderText = getConfig().general.songFolder;
+    if (folderText.empty()) folderText = "songs";
+    const std::u8string utf8Folder(folderText.begin(), folderText.end());
+    std::filesystem::path folder(utf8Folder);
+    if (folder.is_relative())
+        folder = NoteBot::getInstance().getSelf().getModDir() / folder;
+    return folder.lexically_normal();
+}
+
 static std::filesystem::path getPersistentConfigPath() {
     return getDataDir() / "config-backup.json";
 }

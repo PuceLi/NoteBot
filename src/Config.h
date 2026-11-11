@@ -78,6 +78,7 @@ struct NoteBotConfig {
 NoteBotConfig& getConfig();
 std::filesystem::path getConfigPath();
 std::filesystem::path getDataDir();
+std::filesystem::path getSongDir();
 bool sanitizeConfig(NoteBotConfig& config);
 void loadConfig();
 void saveConfig();

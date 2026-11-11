@@ -1,4 +1,5 @@
 #include "NBSDecoder.h"
+#include "ui/translation.h"
 
 #include <algorithm>
 #include <array>
@@ -48,7 +49,8 @@ std::optional<Song> NBSDecoder::decode(const std::filesystem::path& filePath) {
 NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path& filePath) {
     std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open()) {
-        return {std::nullopt, "Could not open the file (check that it exists and is not in use)"};
+        return {std::nullopt, ui::translate("notebot.decoder.file_open",
+            "Could not open the file (check that it exists and is not in use)")};
     }
 
     try {
@@ -60,13 +62,13 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
         if (length == 0) {
             nbsVersion = readByte(file);
             if (nbsVersion < 1 || nbsVersion > 6) {
-                return {std::nullopt, "Unsupported NBS version " + std::to_string(nbsVersion) +
-                    " (supported versions: 1-6)"};
+                return {std::nullopt, ui::format("notebot.decoder.unsupported_version",
+                    "Unsupported NBS version {0} (supported versions: 1-6)", nbsVersion)};
             }
             firstCustomInstrument = readByte(file);
             if (firstCustomInstrument < 16) {
-                return {std::nullopt, "Invalid first custom instrument ID " +
-                    std::to_string(firstCustomInstrument)};
+                return {std::nullopt, ui::format("notebot.decoder.invalid_custom_id",
+                    "Invalid first custom instrument ID {0}", firstCustomInstrument)};
             }
             if (nbsVersion >= 3) { readShort(file); }
         }
@@ -83,7 +85,8 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
 
         const float speed = readShort(file) / 100.0f;
         if (speed <= 0.0f) {
-            return {std::nullopt, "Invalid song speed (the tempo value is zero)"};
+            return {std::nullopt, ui::translate("notebot.decoder.invalid_speed",
+                "Invalid song speed (the tempo value is zero)")};
         }
         readByte(file);
         readByte(file);
@@ -110,8 +113,8 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
             const double roundedTick = std::round(tick);
             if (!std::isfinite(roundedTick) || roundedTick < std::numeric_limits<int>::min() ||
                 roundedTick > std::numeric_limits<int>::max()) {
-                return {std::nullopt, "Song timing is out of range near tick " +
-                    std::to_string(tick)};
+                return {std::nullopt, ui::format("notebot.decoder.timing_out_of_range",
+                    "Song timing is out of range near tick {0}", tick)};
             }
 
             while (true) {
@@ -122,9 +125,9 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
                 const uint8_t key = readByte(file);
 
                 if (key > 87) {
-                    return {std::nullopt, "Invalid note key " + std::to_string(key) +
-                        " at tick " + std::to_string(static_cast<int>(roundedTick)) +
-                        " (valid NBS keys are 0-87)"};
+                    return {std::nullopt, ui::format("notebot.decoder.invalid_note_key",
+                        "Invalid note key {0} at tick {1} (valid NBS keys are 0-87)",
+                        key, static_cast<int>(roundedTick))};
                 }
 
                 if (nbsVersion >= 4) {
@@ -154,18 +157,21 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
         }
         std::string error = exception.what();
         if (position != std::streampos(-1)) {
-            error += " at byte " + std::to_string(static_cast<std::streamoff>(position));
+            error = ui::format("notebot.decoder.exception_at_byte", "{0} at byte {1}",
+                error, static_cast<std::streamoff>(position));
         }
         return {std::nullopt, std::move(error)};
     } catch (...) {
-        return {std::nullopt, "Unknown error while reading the NBS file"};
+        return {std::nullopt, ui::translate("notebot.decoder.unknown_error",
+            "Unknown error while reading the NBS file")};
     }
 }
 
 uint8_t NBSDecoder::readByte(std::ifstream& stream) {
     const int value = stream.get();
     if (value == std::char_traits<char>::eof()) {
-        throw std::runtime_error("Unexpected end of NBS file");
+        throw std::runtime_error(ui::translate("notebot.decoder.unexpected_end",
+            "Unexpected end of NBS file"));
     }
     return static_cast<uint8_t>(value);
 }
@@ -188,7 +194,8 @@ std::string NBSDecoder::readString(std::ifstream& stream, int nbsVersion) {
     const int32_t length = readInt(stream);
     constexpr int32_t maxStringLength = 1024 * 1024;
     if (length < 0 || length > maxStringLength) {
-        throw std::runtime_error("Invalid NBS string length");
+        throw std::runtime_error(ui::translate("notebot.decoder.invalid_string_length",
+            "Invalid NBS string length"));
     }
 
     std::string result;
@@ -260,13 +267,15 @@ std::string NBSDecoder::readString(std::ifstream& stream, int nbsVersion) {
         stream.seekg(0, std::ios::end);
         const auto end = stream.tellg();
         if (start == std::streampos(-1) || end == std::streampos(-1) || end - start < length) {
-            throw std::runtime_error("Truncated NBS string");
+            throw std::runtime_error(ui::translate("notebot.decoder.truncated_string",
+                "Truncated NBS string"));
         }
         stream.seekg(start);
 
         result.resize(static_cast<size_t>(length));
         if (length > 0 && !stream.read(result.data(), length)) {
-            throw std::runtime_error("Could not read NBS string");
+            throw std::runtime_error(ui::translate("notebot.decoder.read_string",
+                "Could not read NBS string"));
         }
         result = normalizeTextEncoding(std::move(result));
     }

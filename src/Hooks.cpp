@@ -130,6 +130,7 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
         gPlayer->tick();
     }
     origin(mcGame, client, controllerClientMap, allowMultipleClients);
+    NoteBlockInteraction::updateAutoRotation(client.getLocalPlayer());
     syncUiMouse(client);
 }
 
@@ -221,6 +222,7 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
     void
 ) {
     NoteBlockInteraction::clearNoteEvents();
+    NoteBlockInteraction::clearRenderRotation();
     if (gPlayer) gPlayer->requestClearNoteBlocks();
     origin();
 }

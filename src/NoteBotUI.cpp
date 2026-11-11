@@ -3,12 +3,14 @@
 #include "Config.h"
 #include "Main.h"
 #include "ui/notebot_ui.h"
+#include "ui/translation.h"
 #include "ll/api/service/Bedrock.h"
 #include "mc/client/game/ClientInstance.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/deps/shared_types/v1_26_20/block/NoteBlockInstrumentEnum.h"
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <fmt/format.h>
 #include <filesystem>
 #include <algorithm>
 #include <cctype>
@@ -47,15 +49,15 @@ bool clickedOutsideImGui() {
     return true;
 }
 
-fs::path fromUtf8(std::string_view text) {
-    return fs::path(std::u8string(text.begin(), text.end()));
-}
-
 std::string instrumentName(int value) {
     if (value < 0 || value >= static_cast<int>(Instrument::Size))
-        return "Unrecognized instrument ID " + std::to_string(value);
-    return SharedTypes::v1_26_20::NoteBlockInstrumentEnum::noteBlockInstrumentToString(
+        return fmt::format(fmt::runtime(ui::translate(
+            "notebot.missing.unknown_instrument", "Unrecognized instrument ID {0}")), value);
+    const auto fallback = SharedTypes::v1_26_20::NoteBlockInstrumentEnum::noteBlockInstrumentToString(
         static_cast<Instrument>(value));
+    auto name = ui::translate("notebot.instrument." + std::to_string(value), fallback);
+    std::replace(name.begin(), name.end(), '_', ' ');
+    return name;
 }
 
 int keyCodeFromName(std::string_view name) {
@@ -97,11 +99,7 @@ std::string keyNameFromCode(int code) {
 }
 
 NoteBotUI::NoteBotUI() {
-    auto folder = fromUtf8(getConfig().general.songFolder);
-    const auto dataSongs = getDataDir() / "songs";
-    if (folder.empty() || folder.is_relative()) folder = getDataDir() / folder;
-    if (folder.filename() == "songs" && !fs::exists(folder) && fs::exists(dataSongs)) folder = dataSongs;
-    mMeteorUI = std::make_unique<meteor::NotebotUi>(folder);
+    mMeteorUI = std::make_unique<meteor::NotebotUi>(getSongDir());
 }
 
 NoteBotUI::~NoteBotUI() = default;
@@ -278,14 +276,16 @@ void NoteBotUI::render() {
             mMeteorUI->missingNotes.reserve(diagnostics.missing.size());
             for (const auto& note : diagnostics.missing) {
                 if (note.customInstrument) {
-                    mMeteorUI->missingNotes.push_back("Custom instrument ID " +
-                        std::to_string(note.instrument) + ", pitch " + std::to_string(note.pitch));
+                    mMeteorUI->missingNotes.push_back(fmt::format(fmt::runtime(ui::translate(
+                        "notebot.missing.custom", "Custom instrument ID {0}, pitch {1}")),
+                        note.instrument, note.pitch));
                 } else if (mPlayer->getConfig().mode == NoteBotConfig::NotebotMode::Auto)
-                    mMeteorUI->missingNotes.push_back("Pitch " + std::to_string(note.pitch));
+                    mMeteorUI->missingNotes.push_back(fmt::format(fmt::runtime(ui::translate(
+                        "notebot.missing.pitch", "Pitch {0}")), note.pitch));
                 else
-                    mMeteorUI->missingNotes.push_back(instrumentName(note.instrument) +
-                        ", pitch " + std::to_string(note.pitch) + ", NBS ID " +
-                        std::to_string(note.sourceInstrumentId));
+                    mMeteorUI->missingNotes.push_back(fmt::format(fmt::runtime(ui::translate(
+                        "notebot.missing.instrument", "{0}, pitch {1}, NBS ID {2}")),
+                        instrumentName(note.instrument), note.pitch, note.sourceInstrumentId));
             }
         }
         mMeteorUI->draw();
@@ -341,7 +341,8 @@ void NoteBotUI::renderNowPlaying() {
             const ImVec2 delta = ImGui::GetIO().MouseDelta;
             ImGui::SetWindowPos(ImVec2(pos.x + delta.x, pos.y + delta.y));
         }
-        const char* title = display.songTitle.empty() ? "No song" : display.songTitle.c_str();
+        const auto noSong = ui::translate("notebot.ui.no_song", "No song");
+        const char* title = display.songTitle.empty() ? noSong.c_str() : display.songTitle.c_str();
         const float titleY = titlePos.y + (ImGui::GetFrameHeight() - ImGui::GetTextLineHeight()) * 0.5f;
         ImGui::GetWindowDrawList()->PushClipRect(titlePos,
             ImVec2(titlePos.x + titleWidth, titlePos.y + ImGui::GetFrameHeight()), true);
@@ -358,8 +359,15 @@ void NoteBotUI::renderNowPlaying() {
             : 0.0f;
         const std::string progressText = display.hasSong
             ? formatSongTime(display.currentTick) + " / " + formatSongTime(display.totalTicks)
-            : "No song";
-        ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f), progressText.c_str());
+            : noSong;
+        ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f), "");
+        const ImVec2 barMin = ImGui::GetItemRectMin();
+        const ImVec2 barMax = ImGui::GetItemRectMax();
+        const ImVec2 textSize = ImGui::CalcTextSize(progressText.c_str());
+        const ImVec2 textPos((barMin.x + barMax.x - textSize.x) * 0.5f,
+                             (barMin.y + barMax.y - textSize.y) * 0.5f);
+        ImGui::GetWindowDrawList()->AddText(
+            textPos, ImGui::GetColorU32(ImGuiCol_Text), progressText.c_str());
     }
     ImGui::End();
     ImGui::PopStyleColor();
