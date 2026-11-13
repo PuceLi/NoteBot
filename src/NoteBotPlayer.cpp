@@ -6,6 +6,7 @@
 #include "mc/client/game/ClientInstance.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/client/sound/SoundEngine.h"
+#include "mc/client/sound/ListenerState.h"
 #include "mc/deps/audio/ServerSoundHandle.h"
 #include "mc/deps/shared_types/v1_26_20/block/NoteBlockInstrumentEnum.h"
 #include "mc/world/level/BlockSource.h"
@@ -102,7 +103,7 @@ bool NoteBotPlayer::previewSong(const std::filesystem::path& filePath) {
 }
 
 bool NoteBotPlayer::queueSong(const std::filesystem::path& filePath, bool preview) {
-    auto result = NBSDecoder::decodeWithError(filePath);
+    auto result = NBSDecoder::decodeWithError(filePath, preview);
     std::lock_guard lock(mPendingSongMutex);
     if (!result.song) {
         const auto filename = pathToUtf8(filePath.filename());
@@ -645,11 +646,33 @@ void NoteBotPlayer::playPreviewNotesAtTick(int tick) {
 
     auto clientRef = ll::service::getClientInstance();
     auto* client = clientRef.has_value() ? &clientRef.value() : nullptr;
-    auto* player = client ? client->getLocalPlayer() : nullptr;
     if (!client) return;
 
     auto& soundEngine = *client->getSoundEngine();
-    const Vec3 position = player ? player->getPosition() : Vec3{};
+    const auto* listener = client->getListenerState();
+    Vec3 listenerPosition{};
+    Vec3 listenerRight{1.0f, 0.0f, 0.0f};
+    Vec3 listenerForward{0.0f, 0.0f, 1.0f};
+    if (listener) {
+        listenerPosition = listener->mPosition.get();
+        const auto& forward = listener->mForward.get();
+        const auto& up = listener->mUp.get();
+        // The audio listener follows the active camera, including third person.
+        listenerRight = Vec3{
+            forward.y * up.z - forward.z * up.y,
+            forward.z * up.x - forward.x * up.z,
+            forward.x * up.y - forward.y * up.x
+        };
+        const float rightLength = std::sqrt(listenerRight.x * listenerRight.x +
+            listenerRight.y * listenerRight.y + listenerRight.z * listenerRight.z);
+        const float forwardLength = std::sqrt(forward.x * forward.x + forward.y * forward.y + forward.z * forward.z);
+        if (rightLength > 0.0001f && forwardLength > 0.0001f) {
+            listenerRight = Vec3{listenerRight.x / rightLength, listenerRight.y / rightLength, listenerRight.z / rightLength};
+            listenerForward = Vec3{forward.x / forwardLength, forward.y / forwardLength, forward.z / forwardLength};
+        } else {
+            listener = nullptr;
+        }
+    }
     const float volume = 2.0f;
     const auto range = mSong->notesMap.equal_range(tick);
     for (auto it = range.first; it != range.second; ++it) {
@@ -663,7 +686,16 @@ void NoteBotPlayer::playPreviewNotesAtTick(int tick) {
         if (sound.empty()) continue;
         const float pitch = std::pow(2.0f, (static_cast<float>(note.noteLevel) - 12.0f) / 12.0f);
         const std::string soundName(sound);
-        if (player) {
+        if (listener) {
+            // Place each mono sample on a constant-radius arc around the audio listener. One voice per note avoids doubling volume or phasing.
+            const float angle = std::clamp(note.previewPan, -1.0f, 1.0f) * 1.57079633f;
+            const float side = std::sin(angle);
+            const float front = std::cos(angle);
+            const Vec3 position{
+                listenerPosition.x + listenerRight.x * side + listenerForward.x * front,
+                listenerPosition.y + listenerRight.y * side + listenerForward.y * front,
+                listenerPosition.z + listenerRight.z * side + listenerForward.z * front
+            };
             soundEngine.play(soundName, position, volume, pitch, std::nullopt);
         } else {
             soundEngine.playUI(soundName, volume, pitch);

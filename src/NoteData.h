@@ -58,6 +58,9 @@ struct Note {
     int8_t     noteLevel;
     bool       customInstrument;
     uint8_t    sourceInstrumentId;
+    // Preview-only metadata; world note-block matching ignores layer and pan.
+    int        sourceLayer = 0;
+    float      previewPan = 0.0f; // -1 = left, +1 = right
 
     Note(Instrument inst, int8_t level, bool isCustom = false, uint8_t sourceId = 0)
     : instrument(inst), noteLevel(level), customInstrument(isCustom), sourceInstrumentId(sourceId) {}
