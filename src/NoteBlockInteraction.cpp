@@ -10,6 +10,7 @@
 #include "mc/world/actor/ActorSwingSource.h"
 #include "mc/world/gamemode/GameMode.h"
 #include "mc/world/item/HandSlot.h"
+#include <chrono>
 #include <cmath>
 #include <mutex>
 #include <unordered_map>
@@ -38,6 +39,9 @@ uint64_t lastNoteEventSerial = 0;
 std::mutex renderRotationMutex;
 LocalPlayer* renderRotationPlayer = nullptr;
 Vec2 renderRotation{};
+constexpr auto rotationTargetInterval = std::chrono::milliseconds(250);
+constexpr auto renderRotationHold = std::chrono::milliseconds(250);
+std::chrono::steady_clock::time_point nextRotationTargetUpdate{};
 std::chrono::steady_clock::time_point renderRotationExpires{};
 std::chrono::steady_clock::time_point lastRotationUpdate{};
 float smoothedBodyYaw = 0.0f;
@@ -109,14 +113,18 @@ Vec2 NoteBlockInteraction::calculateRotation(const Vec3& playerPos, const BlockP
 void NoteBlockInteraction::setRenderRotation(LocalPlayer* player, const Vec2& rotation) {
     if (!player) return;
     std::lock_guard lock(renderRotationMutex);
+    const auto now = std::chrono::steady_clock::now();
     if (renderRotationPlayer != player) {
         hasSmoothedRotation = false;
+        nextRotationTargetUpdate = {};
     }
     renderRotationPlayer = player;
-    renderRotation = rotation;
-    // Keep a note's visible turn for five game ticks at 20 TPS, even when
-    // playback advances every tick or several notes share one tick.
-    renderRotationExpires = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
+    if (now >= nextRotationTargetUpdate) {
+        renderRotation = rotation;
+        nextRotationTargetUpdate = now + rotationTargetInterval;
+    }
+    // Hold the model's current turn briefly after each note without changing the camera angles used for the player's view.
+    renderRotationExpires = now + renderRotationHold;
 }
 
 void NoteBlockInteraction::updateAutoRotation(LocalPlayer* player) {
@@ -167,6 +175,7 @@ void NoteBlockInteraction::updateAutoRotation(LocalPlayer* player) {
 void NoteBlockInteraction::clearRenderRotation() {
     std::lock_guard lock(renderRotationMutex);
     renderRotationPlayer = nullptr;
+    nextRotationTargetUpdate = {};
     renderRotationExpires = {};
     hasSmoothedRotation = false;
 }
