@@ -470,10 +470,20 @@ void NoteBotPlayer::tickInternal() {
         }
     }
 
-    if (mClearNoteBlocksRequested.exchange(false, std::memory_order_acq_rel)) {
-        stopInternal();
+    const bool worldExited = mWorldExitRequested.exchange(false, std::memory_order_acq_rel);
+    const bool clearRequested = mClearNoteBlocksRequested.exchange(false, std::memory_order_acq_rel);
+    if (worldExited || clearRequested) {
+        // Keep its playback state so it can continue from the menu
+        const bool keepPreview = !clearRequested && mPreviewMode && mSong && mStage == Stage::Playing;
+        if (!keepPreview) stopInternal();
         mNoteBlockManager.clear();
         mAutoRefreshNearby = false;
+        if (keepPreview) {
+            mPlaybackClock.reset();
+            mHasSimulationTick = false;
+            mHasWorldPlaybackTick = false;
+            mWorldPaused.store(false, std::memory_order_release);
+        }
     }
 
     const int scanRadius = mPendingScanRadius.exchange(-1, std::memory_order_acq_rel);

@@ -158,7 +158,7 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
         }
 
         if (preview) {
-            // Read additional audio metadata only for preview.
+            // Read additional audio metadata only for preview
             std::vector<float> authoredLayerPans(layerCount, 0.0f);
             if (file.peek() != std::char_traits<char>::eof()) {
                 for (auto& layerPan : authoredLayerPans) {
