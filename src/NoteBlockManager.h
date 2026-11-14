@@ -3,7 +3,7 @@
 #include "NoteData.h"
 #include "mc/world/level/BlockPos.h"
 #include "mc/world/level/BlockSource.h"
-#include "mc/deps/core/math/Vec3.h"
+
 #include <vector>
 #include <unordered_map>
 #include <optional>

@@ -1,9 +1,7 @@
 #pragma once
 
 #include "NoteData.h"
-#include <fstream>
 #include <filesystem>
-#include <memory>
 #include <optional>
 #include <string>
 

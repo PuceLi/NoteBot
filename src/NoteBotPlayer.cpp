@@ -6,7 +6,6 @@
 #include "mc/client/game/ClientInstance.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/client/sound/SoundEngine.h"
-#include "mc/deps/audio/ServerSoundHandle.h"
 #include "mc/deps/shared_types/v1_26_20/block/NoteBlockInstrumentEnum.h"
 #include "mc/world/level/BlockSource.h"
 #include "mc/world/level/GameType.h"

@@ -4,8 +4,6 @@
 #include "Main.h"
 #include "ui/notebot_ui.h"
 #include "ui/translation.h"
-#include "ll/api/service/Bedrock.h"
-#include "mc/client/game/ClientInstance.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/deps/shared_types/v1_26_20/block/NoteBlockInstrumentEnum.h"
 #include <imgui.h>
@@ -13,9 +11,6 @@
 #include <fmt/format.h>
 #include <filesystem>
 #include <algorithm>
-#include <cctype>
-#include <cstdint>
-#include <cstdio>
 #include <string_view>
 #include <windows.h>
 

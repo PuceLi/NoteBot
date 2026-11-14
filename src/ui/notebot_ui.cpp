@@ -4,7 +4,6 @@
 #include <imgui.h>
 #include <fmt/format.h>
 #include <algorithm>
-#include <cctype>
 #include <random>
 #include <cfloat>
 #include <vector>

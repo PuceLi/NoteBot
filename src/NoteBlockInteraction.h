@@ -3,7 +3,7 @@
 #include "mc/deps/core/math/Vec2.h"
 #include "mc/deps/core/math/Vec3.h"
 #include "mc/world/level/BlockPos.h"
-#include <cstdint>
+
 #include <optional>
 
 class LocalPlayer;
