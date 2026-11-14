@@ -80,6 +80,7 @@ private:
     };
 
     std::optional<Song> mSong;
+    std::vector<uint64> mPreviewSoundHandles;
     std::mutex mPendingSongMutex;
     std::optional<PendingSong> mPendingSong;
     std::optional<std::string> mPendingSongError;
@@ -126,6 +127,7 @@ private:
     void publishDisplayState();
     std::string composeStatus() const;
     void stopInternal();
+    void updatePreviewSounds(bool stopAll);
     void beginTuning();
     void prepareTuneTargets();
     void tickTuning();

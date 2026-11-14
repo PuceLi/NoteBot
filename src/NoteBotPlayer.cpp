@@ -90,7 +90,7 @@ std::string describeMissingNote(const NoteBlockManager::RequiredNote& missing) {
 }
 
 NoteBotPlayer::NoteBotPlayer() : mConfig(notebot::getConfig()) { publishDisplayState(); }
-NoteBotPlayer::~NoteBotPlayer() = default;
+NoteBotPlayer::~NoteBotPlayer() { updatePreviewSounds(true); }
 
 bool NoteBotPlayer::loadSong(const std::filesystem::path& filePath) {
     return queueSong(filePath, false);
@@ -172,6 +172,7 @@ void NoteBotPlayer::stop() {
 }
 
 void NoteBotPlayer::stopInternal() {
+    updatePreviewSounds(true);
     mIsPlaying   = false;
     mPreviewMode = false;
     mCurrentTick = 0;
@@ -187,6 +188,26 @@ void NoteBotPlayer::stopInternal() {
     mWorldPaused.store(false, std::memory_order_release);
     mHasSimulationTick = false;
     mHasWorldPlaybackTick = false;
+}
+
+void NoteBotPlayer::updatePreviewSounds(bool stopAll) {
+    auto clientRef = ll::service::getClientInstance();
+    auto* client = clientRef.has_value() ? &clientRef.value() : nullptr;
+    if (!client) {
+        mPreviewSoundHandles.clear();
+        return;
+    }
+
+    auto& soundEngine = *client->getSoundEngine();
+    if (stopAll) {
+        for (const uint64 handle : mPreviewSoundHandles) soundEngine.stop(handle);
+        mPreviewSoundHandles.clear();
+        return;
+    }
+
+    std::erase_if(mPreviewSoundHandles, [&soundEngine](uint64 handle) {
+        return !soundEngine.isPlayingSound(handle);
+    });
 }
 
 void NoteBotPlayer::beginTuning() {
@@ -439,6 +460,7 @@ void NoteBotPlayer::tick() {
 }
 
 void NoteBotPlayer::tickInternal() {
+    updatePreviewSounds(false);
     std::optional<PendingSong> nextSong;
     std::optional<std::string> loadError;
     {
@@ -670,7 +692,7 @@ void NoteBotPlayer::playPreviewNotesAtTick(int tick) {
         if (sound.empty()) continue;
         const float pitch = std::pow(2.0f, (static_cast<float>(note.noteLevel) - 12.0f) / 12.0f);
         const std::string soundName(sound);
-        soundEngine.playUI(soundName, volume, pitch);
+        mPreviewSoundHandles.push_back(soundEngine.playUI(soundName, volume, pitch));
     }
 }
 

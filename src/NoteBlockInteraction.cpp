@@ -60,12 +60,6 @@ float approachYaw(float current, float target, float maxStep) {
     return wrapYaw(current + std::copysign(maxStep, difference));
 }
 
-void applyMobYaw(LocalPlayer& player, float bodyYaw, float headYaw) {
-    // Update only the live values. The paired setters also overwrite Bedrock's
-    // previous-frame values and disable the renderer's normal interpolation.
-    player.setYBodyRotation(bodyYaw);
-    player.setYHeadRot(headYaw);
-}
 }
 
 void NoteBlockInteraction::recordNoteEvent(const BlockPos& pos, int pitch) {
@@ -127,17 +121,17 @@ void NoteBlockInteraction::setRenderRotation(LocalPlayer* player, const Vec2& ro
     renderRotationExpires = now + renderRotationHold;
 }
 
-void NoteBlockInteraction::updateAutoRotation(LocalPlayer* player) {
-    std::lock_guard lock(renderRotationMutex);
-    if (!renderRotationPlayer) return;
+static std::optional<NoteBlockInteraction::ModelRotation> updateRenderRotation(LocalPlayer* player) {
+    if (!renderRotationPlayer) return std::nullopt;
     if (player != renderRotationPlayer) {
         renderRotationPlayer = nullptr;
         hasSmoothedRotation = false;
-        return;
+        return std::nullopt;
     }
     const auto now = std::chrono::steady_clock::now();
-    const float nativeBodyYaw = player->getYBodyRotation();
-    const float nativeHeadYaw = player->getYHeadRot();
+    // The actor yaw is the player's real camera orientation.
+    const float nativeBodyYaw = player->getRotation().y;
+    const float nativeHeadYaw = nativeBodyYaw;
     if (!hasSmoothedRotation) {
         smoothedBodyYaw = nativeBodyYaw;
         smoothedHeadYaw = nativeHeadYaw;
@@ -163,13 +157,18 @@ void NoteBlockInteraction::updateAutoRotation(LocalPlayer* player) {
     if (now >= renderRotationExpires &&
         std::abs(wrapYaw(nativeBodyYaw - smoothedBodyYaw)) < 1.0f &&
         std::abs(wrapYaw(nativeHeadYaw - smoothedHeadYaw)) < 1.0f) {
-        // The input tick already installed the live camera angles; relinquish
-        // control only after the smoothed model has caught up with them.
+        // Relinquish the model override once it has returned to the player's
+        // actual yaw, rather than reading back our previous model update.
         renderRotationPlayer = nullptr;
         hasSmoothedRotation = false;
-        return;
+        return std::nullopt;
     }
-    applyMobYaw(*player, smoothedBodyYaw, smoothedHeadYaw);
+    return NoteBlockInteraction::ModelRotation{smoothedBodyYaw, smoothedHeadYaw};
+}
+
+std::optional<NoteBlockInteraction::ModelRotation> NoteBlockInteraction::getRenderRotation(LocalPlayer* player) {
+    std::lock_guard lock(renderRotationMutex);
+    return updateRenderRotation(player);
 }
 
 void NoteBlockInteraction::clearRenderRotation() {

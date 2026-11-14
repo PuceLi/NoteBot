@@ -13,12 +13,18 @@
 #include "ll/api/service/TargetedBedrock.h"
 #include "mc/client/game/ClientInstance.h"
 #include "mc/client/network/LegacyClientNetworkHandler.h"
+#include "mc/client/player/LocalPlayer.h"
+#include "mc/client/renderer/game/LevelRendererCamera.h"
+#include "mc/entity/components/ActorHeadRotationComponent.h"
+#include "mc/entity/components/MobBodyRotationComponent.h"
 #include "mc/deps/input/HIDController.h"
 #include "mc/deps/input/InputHandler.h"
 #include "mc/network/LoopbackPacketSender.h"
 #include "mc/network/packet/InventoryTransactionPacket.h"
 #include "mc/network/packet/PlayerActionPacket.h"
 #include "mc/network/packet/BlockEventPacket.h"
+#include "mc/network/packet/MovePlayerPacket.h"
+#include "mc/network/packet/PlayerAuthInputPacket.h"
 
 #include <imgui.h>
 #include <variant>
@@ -33,6 +39,11 @@ static ll::event::ListenerPtr keyListener;
 static ll::event::ListenerPtr mouseListener;
 static std::atomic<bool> uiMouseActive{false};
 static std::atomic<bool> restoreGameMouse{false};
+
+static std::optional<NoteBlockInteraction::ModelRotation> getAutoRotatePose(LocalPlayer* player) {
+    if (!gPlayer || !gPlayer->getConfig().autoRotate || !player) return std::nullopt;
+    return NoteBlockInteraction::getRenderRotation(player);
+}
 
 static void syncUiMouse(IClientInstance& client) {
     const bool visible = gUI && gUI->isVisible();
@@ -130,8 +141,58 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
         gPlayer->tick();
     }
     origin(mcGame, client, controllerClientMap, allowMultipleClients);
-    NoteBlockInteraction::updateAutoRotation(client.getLocalPlayer());
     syncUiMouse(client);
+}
+
+LL_AUTO_TYPE_INSTANCE_HOOK(
+    NoteBotModelRotationHook,
+    ll::memory::HookPriority::Normal,
+    LevelRendererCamera,
+    &LevelRendererCamera::$render,
+    void,
+    BaseActorRenderContext& context,
+    ViewRenderObject const& renderObject,
+    IClientInstance& client
+) {
+    auto* player = client.getLocalPlayer();
+    const auto rotation = getAutoRotatePose(player);
+    auto body = player ? player->getEntityContext().tryGetComponent<MobBodyRotationComponent>()
+                       : optional_ref<MobBodyRotationComponent>{};
+    auto head = player ? player->getEntityContext().tryGetComponent<ActorHeadRotationComponent>()
+                       : optional_ref<ActorHeadRotationComponent>{};
+    if (!rotation || !body || !head) {
+        origin(context, renderObject, client);
+        return;
+    }
+
+    static std::atomic<bool> loggedModelOverride{false};
+    if (!loggedModelOverride.exchange(true, std::memory_order_relaxed)) {
+        NoteBot::getInstance().getSelf().getLogger().info(
+            "Auto-rotate: model override active during world rendering");
+    }
+
+    struct RestoreModelRotation {
+        MobBodyRotationComponent& body;
+        ActorHeadRotationComponent& head;
+        float bodyYaw;
+        float oldBodyYaw;
+        float headYaw;
+        float oldHeadYaw;
+        ~RestoreModelRotation() {
+            body.mYBodyRot = bodyYaw;
+            body.mYBodyRotO = oldBodyYaw;
+            head.mYHeadRot = headYaw;
+            head.mYHeadRotO = oldHeadYaw;
+        }
+    } restore{*body, *head, body->mYBodyRot, body->mYBodyRotO,
+              head->mYHeadRot, head->mYHeadRotO};
+
+    // Override only the model pose while the third-person world view is rendered
+    body->mYBodyRot = rotation->bodyYaw;
+    body->mYBodyRotO = rotation->bodyYaw;
+    head->mYHeadRot = rotation->headYaw;
+    head->mYHeadRotO = rotation->headYaw;
+    origin(context, renderObject, client);
 }
 
 LL_AUTO_TYPE_INSTANCE_HOOK(
@@ -157,6 +218,19 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
     void,
     Packet& packet
 ) {
+    if (gPlayer && gPlayer->getConfig().autoRotate) {
+        auto client = ll::service::getClientInstance();
+        auto* player = client ? client->getLocalPlayer() : nullptr;
+        if (auto pose = getAutoRotatePose(player)) {
+            if (packet.getId() == MinecraftPacketIds::PlayerAuthInputPacket) {
+                auto& input = static_cast<PlayerAuthInputPacket&>(packet);
+                input.mYHeadRot = pose->headYaw;
+            } else if (packet.getId() == MinecraftPacketIds::MovePlayer) {
+                auto& movement = static_cast<MovePlayerPacket&>(packet);
+                movement.mYHeadRot = pose->headYaw;
+            }
+        }
+    }
     const bool debugBlockEvents = getConfig().debugBlockEvents;
     if (debugBlockEvents && packet.getId() == MinecraftPacketIds::PlayerAction) {
         auto& action = static_cast<PlayerActionPacket&>(packet);
