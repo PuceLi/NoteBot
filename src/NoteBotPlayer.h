@@ -40,6 +40,10 @@ public:
         mPendingControl.store(ControlRequest::None, std::memory_order_release);
         mClearNoteBlocksRequested.store(true, std::memory_order_release);
     }
+    void requestWorldExit() noexcept {
+        mPendingScanRadius.store(-1, std::memory_order_release);
+        mWorldExitRequested.store(true, std::memory_order_release);
+    }
     void tick();
 
     DisplayState getDisplayState() const;
@@ -94,6 +98,7 @@ private:
     std::atomic<int>    mPendingScanRadius{-1};
     std::atomic<ControlRequest> mPendingControl{ControlRequest::None};
     std::atomic<bool> mClearNoteBlocksRequested{false};
+    std::atomic<bool> mWorldExitRequested{false};
     std::atomic<bool> mWorldPaused{false};
     uint64_t mLastSimulationTick = 0;
     bool mHasSimulationTick = false;

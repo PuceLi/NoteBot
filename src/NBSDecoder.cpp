@@ -46,7 +46,7 @@ std::optional<Song> NBSDecoder::decode(const std::filesystem::path& filePath) {
     return decodeWithError(filePath).song;
 }
 
-NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path& filePath) {
+NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path& filePath, bool preview) {
     std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open()) {
         return {std::nullopt, ui::translate("notebot.decoder.file_open",
@@ -73,7 +73,7 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
             if (nbsVersion >= 3) { readShort(file); }
         }
 
-        readShort(file);
+        const uint16_t layerCount = readShort(file);
         song.title  = readString(file, nbsVersion);
         if (song.title.find_first_not_of(" \t\r\n") == std::string::npos) {
             const auto filename = filePath.stem().u8string();
@@ -117,9 +117,15 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
                     "Song timing is out of range near tick {0}", tick)};
             }
 
+            int layer = -1;
             while (true) {
                 const uint16_t jumpLayers = readShort(file);
                 if (jumpLayers == 0) break;
+                if (preview) {
+                    if (layer > std::numeric_limits<int>::max() - jumpLayers)
+                        throw std::runtime_error("NBS layer index is out of range");
+                    layer += jumpLayers;
+                }
 
                 const uint8_t instrument = readByte(file);
                 const uint8_t key = readByte(file);
@@ -130,9 +136,11 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
                         key, static_cast<int>(roundedTick))};
                 }
 
+                float pan = 0.0f;
                 if (nbsVersion >= 4) {
                     readByte(file);
-                    readByte(file);
+                    // NBS stores panning as 0 (left), 100 (centre), 200 (right).
+                    pan = (std::clamp(static_cast<int>(readByte(file)), 0, 200) - 100) / 100.0f;
                     readShort(file);
                 }
 
@@ -141,8 +149,63 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
                     ? static_cast<Instrument>(instrument)
                     : fromNBSInstrument(instrument);
                 Note note(inst, key - NOTE_OFFSET, isCustomInstrument, instrument);
+                if (preview) {
+                    note.sourceLayer = layer;
+                    note.previewPan = pan;
+                }
                 song.notesMap.insert({static_cast<int>(roundedTick), note});
             }
+        }
+
+        if (preview) {
+            // Read additional audio metadata only for preview
+            std::vector<float> authoredLayerPans(layerCount, 0.0f);
+            if (file.peek() != std::char_traits<char>::eof()) {
+                for (auto& layerPan : authoredLayerPans) {
+                    readString(file, nbsVersion);
+                    if (nbsVersion >= 4) readByte(file); // Layer lock.
+                    readByte(file); // Layer volume.
+                    if (nbsVersion >= 2)
+                        layerPan = (std::clamp(static_cast<int>(readByte(file)), 0, 200) - 100) / 100.0f;
+                }
+            }
+            for (auto& [noteTick, note] : song.notesMap) {
+                if (static_cast<size_t>(note.sourceLayer) < authoredLayerPans.size())
+                    note.previewPan = std::clamp(note.previewPan + authoredLayerPans[note.sourceLayer], -1.0f, 1.0f);
+            }
+
+            std::map<int, float> layerPans;
+            bool hasAuthoredPan = false;
+            for (const auto& [noteTick, note] : song.notesMap) {
+                if (note.customInstrument) continue;
+                layerPans.try_emplace(note.sourceLayer, 0.0f);
+                hasAuthoredPan = hasAuthoredPan || note.previewPan != 0.0f;
+            }
+            if (!hasAuthoredPan && layerPans.size() > 1) {
+                size_t index = 0;
+                for (auto& [layer, pan] : layerPans)
+                    pan = -0.65f + 1.3f * static_cast<float>(index++) / static_cast<float>(layerPans.size() - 1);
+                for (auto& [noteTick, note] : song.notesMap) {
+                    if (!note.customInstrument) note.previewPan = layerPans.at(note.sourceLayer);
+                }
+            } else if (!hasAuthoredPan && !layerPans.empty()) {
+                int minPitch = std::numeric_limits<int>::max();
+                int maxPitch = std::numeric_limits<int>::min();
+                for (const auto& [noteTick, note] : song.notesMap) {
+                    if (note.customInstrument) continue;
+                    minPitch = std::min(minPitch, static_cast<int>(note.noteLevel));
+                    maxPitch = std::max(maxPitch, static_cast<int>(note.noteLevel));
+                }
+                if (maxPitch > minPitch) {
+                    for (auto& [noteTick, note] : song.notesMap) {
+                        if (note.customInstrument) continue;
+                        const float position = static_cast<float>(note.noteLevel - minPitch) /
+                            static_cast<float>(maxPitch - minPitch);
+                        note.previewPan = -0.55f + position * 1.1f;
+                    }
+                }
+            }
+
         }
 
         song.finishLoading();

@@ -102,7 +102,7 @@ bool NoteBotPlayer::previewSong(const std::filesystem::path& filePath) {
 }
 
 bool NoteBotPlayer::queueSong(const std::filesystem::path& filePath, bool preview) {
-    auto result = NBSDecoder::decodeWithError(filePath);
+    auto result = NBSDecoder::decodeWithError(filePath, preview);
     std::lock_guard lock(mPendingSongMutex);
     if (!result.song) {
         const auto filename = pathToUtf8(filePath.filename());
@@ -469,10 +469,20 @@ void NoteBotPlayer::tickInternal() {
         }
     }
 
-    if (mClearNoteBlocksRequested.exchange(false, std::memory_order_acq_rel)) {
-        stopInternal();
+    const bool worldExited = mWorldExitRequested.exchange(false, std::memory_order_acq_rel);
+    const bool clearRequested = mClearNoteBlocksRequested.exchange(false, std::memory_order_acq_rel);
+    if (worldExited || clearRequested) {
+        // Keep its playback state so it can continue from the menu
+        const bool keepPreview = !clearRequested && mPreviewMode && mSong && mStage == Stage::Playing;
+        if (!keepPreview) stopInternal();
         mNoteBlockManager.clear();
         mAutoRefreshNearby = false;
+        if (keepPreview) {
+            mPlaybackClock.reset();
+            mHasSimulationTick = false;
+            mHasWorldPlaybackTick = false;
+            mWorldPaused.store(false, std::memory_order_release);
+        }
     }
 
     const int scanRadius = mPendingScanRadius.exchange(-1, std::memory_order_acq_rel);
@@ -645,11 +655,9 @@ void NoteBotPlayer::playPreviewNotesAtTick(int tick) {
 
     auto clientRef = ll::service::getClientInstance();
     auto* client = clientRef.has_value() ? &clientRef.value() : nullptr;
-    auto* player = client ? client->getLocalPlayer() : nullptr;
     if (!client) return;
 
     auto& soundEngine = *client->getSoundEngine();
-    const Vec3 position = player ? player->getPosition() : Vec3{};
     const float volume = 2.0f;
     const auto range = mSong->notesMap.equal_range(tick);
     for (auto it = range.first; it != range.second; ++it) {
@@ -663,11 +671,7 @@ void NoteBotPlayer::playPreviewNotesAtTick(int tick) {
         if (sound.empty()) continue;
         const float pitch = std::pow(2.0f, (static_cast<float>(note.noteLevel) - 12.0f) / 12.0f);
         const std::string soundName(sound);
-        if (player) {
-            soundEngine.play(soundName, position, volume, pitch, std::nullopt);
-        } else {
-            soundEngine.playUI(soundName, volume, pitch);
-        }
+        soundEngine.playUI(soundName, volume, pitch);
     }
 }
 

@@ -223,7 +223,7 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
 ) {
     NoteBlockInteraction::clearNoteEvents();
     NoteBlockInteraction::clearRenderRotation();
-    if (gPlayer) gPlayer->requestClearNoteBlocks();
+    if (gPlayer) gPlayer->requestWorldExit();
     origin();
 }
 

@@ -19,7 +19,7 @@ public:
     };
 
     static std::optional<Song> decode(const std::filesystem::path& filePath);
-    static DecodeResult decodeWithError(const std::filesystem::path& filePath);
+    static DecodeResult decodeWithError(const std::filesystem::path& filePath, bool preview = false);
 
 private:
     static uint8_t  readByte(std::ifstream& stream);
