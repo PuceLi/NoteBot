@@ -3,7 +3,7 @@
 #include "mc/deps/core/math/Vec2.h"
 #include "mc/deps/core/math/Vec3.h"
 #include "mc/world/level/BlockPos.h"
-#include <cstdint>
+
 #include <optional>
 
 class LocalPlayer;
@@ -15,10 +15,15 @@ namespace notebot {
 
 class NoteBlockInteraction {
 public:
+    struct ModelRotation {
+        float bodyYaw;
+        float headYaw;
+    };
+
     static Vec2 calculateRotation(const Vec3& playerPos, const BlockPos& blockPos);
 
     static void setRenderRotation(LocalPlayer* player, const Vec2& rotation);
-    static void updateAutoRotation(LocalPlayer* player);
+    static std::optional<ModelRotation> getRenderRotation(LocalPlayer* player);
     static void clearRenderRotation();
 
     static bool tuneNoteBlock(LocalPlayer* player, const BlockPos& pos, bool swingArm = true);

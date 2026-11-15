@@ -3,8 +3,6 @@
 #include "NoteBotPlayer.h"
 #include <chrono>
 #include <atomic>
-#include <cstdint>
-#include <filesystem>
 #include <memory>
 
 namespace meteor { class NotebotUi; }

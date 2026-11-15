@@ -6,7 +6,6 @@
 #include <string>
 #include <array>
 #include <chrono>
-#include <cstdint>
 #include <vector>
 
 namespace meteor {
