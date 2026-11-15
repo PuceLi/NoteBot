@@ -250,7 +250,10 @@ void RenderImGui(IDXGISwapChain* pSwapChain) {
         RenderNoteBotUI();
 
         ImGui::Render();
-        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        ImDrawData* drawData = ImGui::GetDrawData();
+        // Avoid the DX11 backend's per-frame work when ImGui has nothing to draw.
+        if (drawData && drawData->TotalVtxCount > 0)
+            ImGui_ImplDX11_RenderDrawData(drawData);
 
         ID3D11RenderTargetView* nullRTV = nullptr;
         g_pd3dDeviceContext->OMSetRenderTargets(1, &nullRTV, nullptr);
