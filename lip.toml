@@ -1,0 +1,27 @@
+format = 4
+id = "github.com/PuceLi/NoteBot"
+version = "1.2.3"
+
+[info]
+name = "NoteBot"
+description = "A client-side feature that automatically plays songs by tuning and hitting nearby Note Blocks based on loaded NBS (Noteblock Studio) files"
+tags = ["utility"]
+logo = ""
+
+# The default variant has an entry for each side: the server build for servers and the client
+# build for clients, so the mod is installed as "<id>" on either side.
+
+[[variants.""]]
+side = "client"
+platform = "win-x64"
+
+[variants."".deps]
+# The bare id, not "#client": a lip.toml dependency is never rewritten, and lip.toml releases of
+# LeviLamina have no "client" variant. The range starts above 26.60.6, the last tooth.json release,
+# because the "" variant of a tooth.json release is the server build.
+"github.com/LiteLDev/LeviLamina" = ">26.60.2 <26.61.0"
+
+[[variants."".assets]]
+type = "zip"
+urls = ["https://{{id}}/releases/download/v{{version}}/NoteBot-client-windows-x64.zip"]
+place = [{ src = "NoteBot/", dest = "mods/NoteBot/" }]
