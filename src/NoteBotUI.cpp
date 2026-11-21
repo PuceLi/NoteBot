@@ -4,6 +4,8 @@
 #include "Main.h"
 #include "ui/notebot_ui.h"
 #include "ui/translation.h"
+#include "ui/theme.h"
+#include "ll/api/Config.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/deps/shared_types/v1_26_20/block/NoteBlockInstrumentEnum.h"
 #include <imgui.h>
@@ -13,6 +15,7 @@
 #include <algorithm>
 #include <string_view>
 #include <windows.h>
+#include <shellapi.h>
 
 namespace fs = std::filesystem;
 
@@ -120,6 +123,22 @@ void NoteBotUI::setPlayer(NoteBotPlayer* player) {
     mMeteorUI->keybind = keyNameFromCode(mPlayer->getConfig().keybinds.hotkey);
     mMeteorUI->playbackKeybind = keyNameFromCode(mPlayer->getConfig().keybinds.playPause);
     auto& actions = mMeteorUI->actions;
+    actions.backupConfig = [this] { startDataTransfer(ModDataTransfer::Kind::Config, false); };
+    actions.importConfig = [this] { startDataTransfer(ModDataTransfer::Kind::Config, true); };
+    actions.backupSongs = [this] { startDataTransfer(ModDataTransfer::Kind::Songs, false); };
+    actions.importSongs = [this] { startDataTransfer(ModDataTransfer::Kind::Songs, true); };
+    actions.openBackupFolder = [this] {
+        try {
+            const auto directory = NoteBot::getInstance().getSelf().getModDir() / "backup";
+            fs::create_directories(directory / "config");
+            fs::create_directories(directory / "songs");
+            if (reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", directory.c_str(),
+                nullptr, nullptr, SW_SHOWNORMAL)) <= 32) throw std::runtime_error("Cannot open backup folder");
+        } catch (const std::exception& error) {
+            mMeteorUI->dataTransferFailed = true;
+            mMeteorUI->dataTransferStatus = ui::format("notebot.data.failed", "Operation failed: {0}", error.what());
+        }
+    };
     actions.loadSong = [this](const fs::path& path) { mPlayer->loadSong(path); };
     actions.previewSong = [this](const fs::path& path) { mPlayer->previewSong(path); };
     actions.pauseResume = [this] { mPlayer->togglePlayback(); };
@@ -130,8 +149,9 @@ void NoteBotUI::setPlayer(NoteBotPlayer* player) {
     actions.clearNoteBlocks = [this] { mPlayer->requestClearNoteBlocks(); };
     actions.alignCenter = [] {
         const auto* viewport = ImGui::GetMainViewport();
-        ImGui::SetWindowPos("Notebot##module", ImVec2(viewport->GetCenter().x - 325.0f,
-                                                      viewport->GetCenter().y - 330.0f));
+        if (const auto* window = ImGui::FindWindowByName("Notebot##module"))
+            ImGui::SetWindowPos("Notebot##module", ImVec2(viewport->GetCenter().x - window->Size.x / 2,
+                                                          viewport->GetCenter().y - window->Size.y / 2));
     };
     actions.resetNowPlayingPosition = [this] { mResetNowPlayingRequested = true; };
     actions.nowPlayingVisibilityChanged = [this](bool visible) {
@@ -139,6 +159,12 @@ void NoteBotUI::setPlayer(NoteBotPlayer* player) {
         markConfigEdited();
     };
     actions.settingsChanged = [this](const meteor::NotebotSettings&) { applyMeteorSettings(); };
+    actions.appearanceChanged = [this](const UiAppearance& appearance) {
+        mPlayer->getConfig().ui = appearance;
+        uiLanguageOverride.store(appearance.language, std::memory_order_relaxed);
+        markConfigEdited();
+    };
+    actions.resetLayout = [this] { mResetNowPlayingRequested = true; };
     actions.animatedColorsChanged = [this](const meteor::NotebotSettings& settings) {
         if (!mPlayer) return;
         auto& config = mPlayer->getConfig();
@@ -179,9 +205,12 @@ void NoteBotUI::syncMeteorSettingsFromConfig() {
     if (!mPlayer || !mMeteorUI) return;
     const auto& config = mPlayer->getConfig();
     auto& settings = mMeteorUI->settings;
+    mMeteorUI->appearance = config.ui;
+    uiLanguageOverride.store(config.ui.language, std::memory_order_relaxed);
     mMeteorUI->showNowPlaying = config.showNowPlaying;
     settings.playbackSpeed = config.playbackSpeed;
     settings.tuneIntervalTicks = config.tuneIntervalTicks;
+    settings.concurrentTuneBlocks = config.concurrentTuneBlocks;
     settings.mode = config.mode == NoteBotConfig::NotebotMode::Manual ? 1 : 0;
     settings.playingMode = static_cast<int>(config.playingMode);
     settings.noteMap = config.noteMap;
@@ -199,7 +228,9 @@ void NoteBotUI::syncMeteorSettingsFromConfig() {
     settings.noteTextScale = config.noteTextScale;
     settings.noteTextHeight = config.noteTextHeight;
     settings.boxExpansion = config.boxExpansion;
+    settings.hitFadeSeconds = config.hitFadeSeconds;
     settings.showScannedNoteblocks = config.showUnmappedBoxes;
+    settings.rainbowColors = config.renderRainbowColors;
     settings.renderColors = {{
         config.colors.untunedSide, config.colors.untunedLine,
         config.colors.tunedSide, config.colors.tunedLine,
@@ -216,6 +247,7 @@ void NoteBotUI::applyMeteorSettings() {
     auto& config = mPlayer->getConfig();
     config.playbackSpeed = settings.playbackSpeed;
     config.tuneIntervalTicks = settings.tuneIntervalTicks;
+    config.concurrentTuneBlocks = settings.concurrentTuneBlocks;
     config.mode = settings.mode == 1 ? NoteBotConfig::NotebotMode::Manual
                                       : NoteBotConfig::NotebotMode::Auto;
     config.playingMode = static_cast<NoteBotConfig::PlayingMode>(settings.playingMode);
@@ -234,7 +266,9 @@ void NoteBotUI::applyMeteorSettings() {
     config.noteTextScale = settings.noteTextScale;
     config.noteTextHeight = settings.noteTextHeight;
     config.boxExpansion = settings.boxExpansion;
+    config.hitFadeSeconds = settings.hitFadeSeconds;
     config.showUnmappedBoxes = settings.showScannedNoteblocks;
+    config.renderRainbowColors = settings.rainbowColors;
     config.colors.untunedSide = settings.renderColors[0];
     config.colors.untunedLine = settings.renderColors[1];
     config.colors.tunedSide = settings.renderColors[2];
@@ -249,6 +283,11 @@ void NoteBotUI::applyMeteorSettings() {
     config.remainingTextColor = settings.renderColors[11];
     if (sanitizeConfig(config)) syncMeteorSettingsFromConfig();
     markConfigEdited();
+}
+
+void NoteBotUI::prepareFrame() {
+    if (!ImGui::GetCurrentContext()) return;
+    pollDataTransfer();
 }
 
 void NoteBotUI::render() {
@@ -299,7 +338,8 @@ void NoteBotUI::render() {
     if (isVisible() && clickedOutsideImGui())
         setVisible(false);
     mCapturingKeyboard.store(isVisible() && mMeteorUI &&
-        (mMeteorUI->isBindingKey() || ImGui::GetIO().WantTextInput), std::memory_order_release);
+        (mDataTransfer.busy() || mMeteorUI->isBindingKey() || ImGui::GetIO().WantTextInput),
+        std::memory_order_release);
     if (mConfigDirty && std::chrono::steady_clock::now() - mLastConfigEdit >=
                             std::chrono::milliseconds(750)) {
         try {
@@ -312,12 +352,109 @@ void NoteBotUI::render() {
     }
 }
 
+void NoteBotUI::startDataTransfer(ModDataTransfer::Kind kind, bool importing) {
+    if (!mMeteorUI || mDataTransfer.busy()) return;
+    try {
+        if (!importing && kind == ModDataTransfer::Kind::Config) {
+            saveConfig();
+            mConfigDirty = false;
+            if (const auto filename = ImGui::GetIO().IniFilename)
+                ImGui::SaveIniSettingsToDisk(filename);
+        }
+        const char* titleKey = kind == ModDataTransfer::Kind::Config
+            ? (importing ? "notebot.data.import_config" : "notebot.data.backup_config")
+            : (importing ? "notebot.data.import_songs" : "notebot.data.backup_songs");
+        const auto title = ui::translate(titleKey, importing ? "Import ZIP Backup" : "Save ZIP Backup");
+        const auto titlePath = fs::path(std::u8string(title.begin(), title.end()));
+        const auto* viewport = ImGui::GetMainViewport();
+        const auto owner = viewport->PlatformHandleRaw ? viewport->PlatformHandleRaw : viewport->PlatformHandle;
+        mDataTransfer.start(kind, importing,
+            {getConfigPath().parent_path(), getDataDir() / "imgui.ini", getSongDir(),
+             NoteBot::getInstance().getSelf().getModDir() / "backup"}, owner, titlePath.wstring());
+        mMeteorUI->dataTransferBusy = true;
+        mMeteorUI->dataTransferFailed = false;
+        mMeteorUI->dataTransferStatus = importing
+            ? ui::translate("notebot.data.importing", "Choose a ZIP backup to import...")
+            : ui::translate("notebot.data.backing_up", "Creating backup...");
+    } catch (const std::exception& error) {
+        mMeteorUI->dataTransferFailed = true;
+        mMeteorUI->dataTransferStatus = ui::format("notebot.data.failed", "Operation failed: {0}", error.what());
+    }
+}
+
+void NoteBotUI::pollDataTransfer() {
+    if (!mMeteorUI) return;
+    auto result = mDataTransfer.poll();
+    if (!result) return;
+    mMeteorUI->dataTransferBusy = false;
+    mMeteorUI->dataTransferFailed = false;
+    if (result->canceled) {
+        mMeteorUI->dataTransferStatus = ui::translate("notebot.data.canceled", "Canceled.");
+        return;
+    }
+    try {
+        if (!result->error.empty()) throw std::runtime_error(result->error);
+        if (result->importing) {
+            const auto root = result->workspace->path / "extracted";
+            if (result->kind == ModDataTransfer::Kind::Config) {
+                const auto configFile = root / "config/config.json";
+                auto imported = readConfigForImport(configFile);
+                if (!ll::config::saveConfig(imported, configFile))
+                    throw std::runtime_error("Cannot prepare imported config.json");
+                std::optional<std::string> layout;
+                const auto ini = root / "data/imgui.ini";
+                if (fs::exists(ini)) {
+                    if (fs::file_size(ini) > 4 * 1024 * 1024)
+                        throw std::runtime_error("Imported ImGui layout is too large");
+                    layout = ll::file_utils::readFile(ini);
+                    if (!layout) throw std::runtime_error("Cannot read imported ImGui layout");
+                }
+                std::vector<backup::FileMapping> mappings{
+                    {root / "config", getConfigPath().parent_path()},
+                    {configFile, getDataDir() / "config-backup.json"}
+                };
+                if (layout) mappings.push_back({ini, getDataDir() / "imgui.ini"});
+                backup::Restore restore(mappings);
+                mPlayer->stop();
+                mPlayer->requestClearNoteBlocks();
+                getConfig() = std::move(imported);
+                mConfigDirty = false;
+                restore.commit();
+                if (layout) {
+                    // Scale the old live windows before applying the saved dimensions.
+                    meteor::theme::apply(getConfig().ui);
+                    ImGui::ClearIniSettings();
+                    ImGui::LoadIniSettingsFromMemory(layout->data(), layout->size());
+                    mMeteorUI->reloadLayout();
+                }
+                syncMeteorSettingsFromConfig();
+                mMeteorUI->keybind = keyNameFromCode(getConfig().keybinds.hotkey);
+                mMeteorUI->playbackKeybind = keyNameFromCode(getConfig().keybinds.playPause);
+                mMeteorUI->setSongsDirectory(getSongDir());
+            } else {
+                mMeteorUI->setSongsDirectory(getSongDir());
+            }
+        }
+        const auto archiveName = result->archive.u8string();
+        const std::string archive(archiveName.begin(), archiveName.end());
+        mMeteorUI->dataTransferStatus = result->importing
+            ? ui::format("notebot.data.imported", "Imported: {0}", archive)
+            : ui::format("notebot.data.saved", "Backup saved: {0}", archive);
+    } catch (const std::exception& error) {
+        mMeteorUI->dataTransferFailed = true;
+        mMeteorUI->dataTransferStatus = ui::format("notebot.data.failed", "Operation failed: {0}", error.what());
+        NoteBot::getInstance().getSelf().getLogger().warn("Mod data operation failed: {}", error.what());
+    }
+}
+
 void NoteBotUI::renderNowPlaying() {
     if (!mPlayer->getConfig().showNowPlaying) return;
+    if (isVisible() && mMeteorUI && mMeteorUI->appearance.hideHud) return;
     const auto display = mPlayer->getDisplayState();
     if (!display.isPlaying && !display.isPaused && !isVisible()) return;
     const auto* viewport = ImGui::GetMainViewport();
-    const auto defaultPosition = ImVec2(viewport->GetCenter().x, viewport->Pos.y + 72.0f);
+    const auto defaultPosition = ImVec2(viewport->GetCenter().x, viewport->Pos.y + meteor::theme::px(72));
+    const bool resetLayout = mResetNowPlayingRequested;
     if (mResetNowPlayingRequested) {
         ImGui::SetNextWindowPos(defaultPosition, ImGuiCond_Always, ImVec2(0.5f, 0.0f));
         mResetNowPlayingRequested = false;
@@ -325,15 +462,20 @@ void NoteBotUI::renderNowPlaying() {
         ImGui::SetNextWindowPos(defaultPosition, ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.0f));
     }
     const auto& style = ImGui::GetStyle();
-    const float hudHeight = std::max(72.0f, style.WindowPadding.y * 2.0f +
-        ImGui::GetFrameHeight() * 2.0f + style.ItemSpacing.y + 4.0f);
-    ImGui::SetNextWindowSize(ImVec2(360.0f, hudHeight), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(240.0f, hudHeight), ImVec2(FLT_MAX, hudHeight));
+    const float hudHeight = std::max(meteor::theme::px(72), style.WindowPadding.y * 2.0f +
+        ImGui::GetFrameHeight() * 2.0f + style.ItemSpacing.y + meteor::theme::px(4));
+    ImGui::SetNextWindowSize(ImVec2(meteor::theme::px(360), hudHeight), resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(meteor::theme::px(240), hudHeight), ImVec2(FLT_MAX, hudHeight));
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
                              ImGuiWindowFlags_NoScrollbar;
     if (!isVisible()) flags |= ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav |
                                ImGuiWindowFlags_NoFocusOnAppearing;
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(20/255.f, 20/255.f, 20/255.f, 0.55f));
+    using meteor::theme::rgba;
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgba(UiColor::NowPlayingBackground));
+    ImGui::PushStyleColor(ImGuiCol_Border, rgba(UiColor::NowPlayingOutline));
+    ImGui::PushStyleColor(ImGuiCol_Text, rgba(UiColor::NowPlayingTitle));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, rgba(UiColor::NowPlayingTrack));
+    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, rgba(UiColor::NowPlayingProgress));
     bool hideRequested = false;
     if (ImGui::Begin("Now Playing##notebot-hud", nullptr, flags)) {
         const bool editable = isVisible();
@@ -375,10 +517,10 @@ void NoteBotUI::renderNowPlaying() {
         const ImVec2 textPos((barMin.x + barMax.x - textSize.x) * 0.5f,
                              (barMin.y + barMax.y - textSize.y) * 0.5f);
         ImGui::GetWindowDrawList()->AddText(
-            textPos, ImGui::GetColorU32(ImGuiCol_Text), progressText.c_str());
+            textPos, meteor::theme::color(UiColor::NowPlayingTime), progressText.c_str());
     }
     ImGui::End();
-    ImGui::PopStyleColor();
+    ImGui::PopStyleColor(5);
     if (hideRequested) {
         mPlayer->getConfig().showNowPlaying = false;
         if (mMeteorUI) mMeteorUI->showNowPlaying = false;

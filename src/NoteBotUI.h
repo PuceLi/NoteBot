@@ -1,6 +1,7 @@
 #pragma once
 
 #include "NoteBotPlayer.h"
+#include "ModDataTransfer.h"
 #include <chrono>
 #include <atomic>
 #include <memory>
@@ -14,6 +15,7 @@ public:
     NoteBotUI();
     ~NoteBotUI();
 
+    void prepareFrame();
     void render();
     void toggle();
     void setVisible(bool visible);
@@ -34,11 +36,14 @@ private:
     bool            mConfigDirty = false;
     bool            mResetNowPlayingRequested = false;
     std::chrono::steady_clock::time_point mLastConfigEdit{};
+    ModDataTransfer mDataTransfer;
 
     void renderNowPlaying();
     void markConfigEdited();
     void syncMeteorSettingsFromConfig();
     void applyMeteorSettings();
+    void startDataTransfer(ModDataTransfer::Kind kind, bool importing);
+    void pollDataTransfer();
 };
 
 } // namespace notebot

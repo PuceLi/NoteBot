@@ -38,9 +38,18 @@ static std::filesystem::path getPersistentConfigPath() {
     return getDataDir() / "config-backup.json";
 }
 
+static void upgradeUiPalette(nlohmann::ordered_json& data) {
+    if (!data.contains("ui") || !data["ui"].is_object()) return;
+    auto& ui = data["ui"];
+    if (ui.contains("colors") && ui["colors"].is_array() && ui["colors"].size() == 21) {
+        const UiAppearance defaults;
+        for (size_t i = 21; i < defaults.colors.size(); ++i) ui["colors"].push_back(defaults.colors[i]);
+    }
+}
+
 bool sanitizeConfig(NoteBotConfig& cfg) {
     const NoteBotConfig defaults;
-    bool changed = false;
+    bool changed = sanitizeUiAppearance(cfg.ui);
     const auto clampInt = [&changed](int& value, int minimum, int maximum) {
         const int valid = std::clamp(value, minimum, maximum);
         if (value != valid) {
@@ -87,11 +96,13 @@ bool sanitizeConfig(NoteBotConfig& cfg) {
     clampInt(cfg.checkNoteblocksDelay, 1, 100);
     clampFloat(cfg.playbackSpeed, 0.02f, 2.0f, defaults.playbackSpeed);
     clampInt(cfg.tuneIntervalTicks, 0, 20);
+    clampInt(cfg.concurrentTuneBlocks, 1, 20);
     clampInt(cfg.keybinds.hotkey, 0, 255);
     clampInt(cfg.keybinds.playPause, 0, 255);
     clampFloat(cfg.noteTextScale, 0.5f, 3.0f, defaults.noteTextScale);
     clampFloat(cfg.noteTextHeight, 0.5f, 2.5f, defaults.noteTextHeight);
     clampFloat(cfg.boxExpansion, 0.0f, 0.08f, defaults.boxExpansion);
+    clampFloat(cfg.hitFadeSeconds, 0.0f, 5.0f, defaults.hitFadeSeconds);
 
     clampColor(cfg.colors.scannedSide, defaults.colors.scannedSide);
     clampColor(cfg.colors.scannedLine, defaults.colors.scannedLine);
@@ -139,7 +150,7 @@ void loadConfig() {
                     const auto version = data.find("version");
                     sourceVersion = version != data.end() && version->is_number_integer()
                         ? version->template get<int>() : 0;
-                    data.erase("concurrentTuneBlocks");
+                    if (sourceVersion == 15) upgradeUiPalette(data);
                     return ll::config::defaultConfigUpdater(defaults, data);
                 });
             if (!currentVersion && !updaterCalled) {
@@ -204,6 +215,40 @@ void saveConfig() {
     if (!ll::config::saveConfig(getConfig(), path)) {
         throw std::runtime_error("Failed to save config: " + path.string());
     }
+}
+
+NoteBotConfig readConfigForImport(const std::filesystem::path& path) {
+    if (std::filesystem::file_size(path) > 4 * 1024 * 1024)
+        throw std::runtime_error("Imported config.json is too large");
+    const auto content = ll::file_utils::readFile(path);
+    if (!content || content->empty()) throw std::runtime_error("Imported config.json is empty");
+    auto data = nlohmann::ordered_json::parse(*content);
+    NoteBotConfig config;
+    if (!data.is_object() || !data.contains("version") || !data["version"].is_number_integer() ||
+        (data["version"].get<int>() != config.version && data["version"].get<int>() != 16 && data["version"].get<int>() != 15 &&
+         data["version"].get<int>() != 14) || !data.contains("general") ||
+        !data["general"].is_object())
+        throw std::runtime_error("Backup config.json is invalid or uses a different config version");
+    // Add newly introduced fields without replacing the user's existing settings.
+    const auto sourceVersion = data["version"].get<int>();
+    if (sourceVersion == 14) {
+        data["version"] = config.version;
+        data["ui"] = ll::reflection::serialize<nlohmann::ordered_json>(config.ui).value();
+    }
+    if (sourceVersion == 15) {
+        if (!data.contains("ui") || !data["ui"].is_object())
+            throw std::runtime_error("Backup UI settings are invalid");
+        data["version"] = config.version;
+        data["ui"]["rainbowColors"] = config.ui.rainbowColors;
+        upgradeUiPalette(data);
+    }
+    if (sourceVersion < config.version) {
+        data["version"] = config.version;
+        data["renderRainbowColors"] = config.renderRainbowColors;
+    }
+    ll::reflection::deserialize(config, data).value();
+    sanitizeConfig(config);
+    return config;
 }
 
 } // namespace notebot

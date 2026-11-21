@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../NoteData.h"
+#include "../UiAppearance.h"
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -13,6 +14,7 @@ namespace meteor {
 struct NotebotSettings {
     float playbackSpeed = 1.0f;
     int tuneIntervalTicks = 0;
+    int concurrentTuneBlocks = 1;
     int mode = 1;                       // 0 AnyInstrument, 1 ExactInstruments
     int playingMode = 1;                // 0 Sequential, 1 Polyphonic
     bool polyphonic = true;
@@ -38,6 +40,7 @@ struct NotebotSettings {
     float noteTextScale = 1.0f;
     float noteTextHeight = 1.3f;
     float boxExpansion = 0.0f;
+    float hitFadeSeconds = 0.5f;
     bool showScannedNoteblocks = false;
 };
 
@@ -55,12 +58,20 @@ struct NotebotActions {
     std::function<void(const std::string&)> playbackBindChanged;
     std::function<void(const NotebotSettings&)> settingsChanged;
     std::function<void(const NotebotSettings&)> animatedColorsChanged;
+    std::function<void()> backupConfig;
+    std::function<void()> importConfig;
+    std::function<void()> backupSongs;
+    std::function<void()> importSongs;
+    std::function<void()> openBackupFolder;
+    std::function<void(const notebot::UiAppearance&)> appearanceChanged;
+    std::function<void()> resetLayout;
 };
 
 class NotebotUi {
 public:
     explicit NotebotUi(std::filesystem::path songsDirectory);
     NotebotSettings settings;
+    notebot::UiAppearance appearance;
     NotebotActions actions;
     bool songLoaded = false;
     std::string songTitle;
@@ -79,14 +90,35 @@ public:
     std::uintptr_t resetIcon = 0;
     std::uintptr_t copyIcon = 0;
     std::uintptr_t pasteIcon = 0;
+    bool dataTransferBusy = false;
+    bool dataTransferFailed = false;
+    std::string dataTransferStatus;
+    bool appearanceStatusFailed = false;
+    std::string appearanceStatus;
 
     void draw();
     void updateRainbowColors();
     std::string getStatus() const;
     void refreshSongs();
+    void setSongsDirectory(std::filesystem::path directory);
+    void reloadLayout();
+    void resetLayout();
     bool isBindingKey() const { return binding_ != BindTarget::None; }
 
 private:
+    int selectedTopTab_ = 0;
+    struct SettingsWindowState {
+        bool expanded = true;
+        bool loaded = false;
+        float expandedHeight = 620.f;
+    };
+    SettingsWindowState settingsWindow_;
+    SettingsWindowState renderWindow_;
+    int selectedSettingsPage_ = 0;
+    bool resetLayoutRequested_ = false;
+    float layoutScale_ = 1.f;
+    float scaleInput_ = 1.f;
+    bool scaleInputEditing_ = false;
     std::filesystem::path songsDirectory_;
     std::vector<std::filesystem::path> songFiles_;
     bool songFolderAvailable_ = false;
@@ -102,8 +134,6 @@ private:
     float moduleExpandedHeight_ = 660.0f;
     bool generalExpanded_ = true;
     bool noteMapExpanded_ = false;
-    bool renderExpanded_ = true;
-    bool bindExpanded_ = true;
     enum class BindTarget { None, Interface, Playback };
     BindTarget binding_ = BindTarget::None;
     int editingColor_ = -1;
@@ -113,6 +143,8 @@ private:
     float colorExpandedHeight_ = 650.0f;
     std::chrono::steady_clock::time_point lastRainbowUpdate_{};
     bool focusSearch_ = true;
+    void drawModSettings();
+    void drawRender();
     void drawSongs();
     void drawModule();
     void drawColorEditor();
