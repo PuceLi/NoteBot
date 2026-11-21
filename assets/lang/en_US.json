@@ -63,6 +63,8 @@
   "notebot.ui.render_text_tip": "Whether to render text above noteblocks",
   "notebot.ui.render_boxes": "Render Boxes",
   "notebot.ui.render_boxes_tip": "Whether to render noteblock outlines",
+  "notebot.ui.render_through_walls": "Render Through Walls",
+  "notebot.ui.render_through_walls_tip": "Show note-block outlines and filled faces through walls",
   "notebot.ui.lines": "Lines",
   "notebot.ui.sides": "Sides",
   "notebot.ui.both": "Both",

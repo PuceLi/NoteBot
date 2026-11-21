@@ -140,7 +140,6 @@ void loadConfig() {
                     sourceVersion = version != data.end() && version->is_number_integer()
                         ? version->template get<int>() : 0;
                     data.erase("concurrentTuneBlocks");
-                    data.erase("renderBoxThroughWalls");
                     return ll::config::defaultConfigUpdater(defaults, data);
                 });
             if (!currentVersion && !updaterCalled) {

@@ -23,6 +23,7 @@ struct NotebotSettings {
     int checkNoteblocksAgainDelay = 1;
     bool renderText = true;
     bool renderBoxes = true;
+    bool renderBoxThroughWalls = false;
     int shapeMode = 1;                  // 0 Lines, 1 Sides, 2 Both
     notebot::NoteMap noteMap = notebot::makeDefaultNoteMap();
     std::array<bool, 12> rainbowColors{};

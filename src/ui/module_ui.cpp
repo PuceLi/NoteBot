@@ -447,6 +447,10 @@ void NotebotUi::drawModule() {
                 const auto renderBoxesTip = translate("notebot.ui.render_boxes_tip",
                     "Whether to render noteblock outlines");
                 changed |= boolRow(renderBoxes.c_str(),renderBoxesTip.c_str(),settings.renderBoxes,defaults.renderBoxes,width);
+                const auto throughWalls = translate("notebot.ui.render_through_walls", "Render Through Walls");
+                const auto throughWallsTip = translate("notebot.ui.render_through_walls_tip",
+                    "Show note-block outlines and filled faces through walls");
+                changed |= boolRow(throughWalls.c_str(),throughWallsTip.c_str(),settings.renderBoxThroughWalls,defaults.renderBoxThroughWalls,width);
                 const auto lines = translate("notebot.ui.lines", "Lines");
                 const auto sides = translate("notebot.ui.sides", "Sides");
                 const auto both = translate("notebot.ui.both", "Both");

@@ -52,6 +52,7 @@ struct WorldOutline {
 };
 struct WorldOverlayState {
     std::vector<WorldOutline> blocks;
+    bool throughWalls = false;
     bool drawFaces = false;
     bool drawLines = true;
     float expansion = 0.0f;
@@ -67,7 +68,7 @@ bool isGameplayScreen() {
 }
 
 bool sameOverlay(const WorldOverlayState& lhs, const WorldOverlayState& rhs) {
-    if (lhs.drawFaces != rhs.drawFaces || lhs.drawLines != rhs.drawLines ||
+    if (lhs.throughWalls != rhs.throughWalls || lhs.drawFaces != rhs.drawFaces || lhs.drawLines != rhs.drawLines ||
         lhs.expansion != rhs.expansion || lhs.blocks.size() != rhs.blocks.size()) return false;
     for (size_t index = 0; index < lhs.blocks.size(); ++index) {
         const auto& a = lhs.blocks[index];
@@ -181,7 +182,7 @@ void renderWorldBoxes(BaseActorRenderContext& context) {
         overlay = worldOverlay;
     }
     auto& cache = overlayMeshCache;
-    if (!isGameplayScreen() || overlay.blocks.empty()) {
+    if (!isGameplayScreen() || overlay.blocks.empty() || overlay.throughWalls) {
         clearOverlayMeshCache();
         return;
     }
@@ -308,6 +309,7 @@ void NoteBlockRenderer::render(const NoteBlockManager& manager, const NoteBotCon
     const auto& targetPitches = snapshot.targetPitches;
 
     WorldOverlayState overlay;
+    overlay.throughWalls = config.renderBoxThroughWalls;
     overlay.drawFaces = config.renderBoxFaces;
     overlay.drawLines = config.renderBoxLines;
     overlay.expansion = config.boxExpansion;
@@ -331,10 +333,11 @@ void NoteBlockRenderer::render(const NoteBlockManager& manager, const NoteBotCon
         std::lock_guard lock(outlineMutex);
         if (!sameOverlay(worldOverlay, overlay)) {
             overlay.revision = worldOverlay.revision + 1;
-            worldOverlay = std::move(overlay);
+            worldOverlay = overlay;
         }
     }
-    if (noteBlocks.empty() || !config.renderText) return;
+    const bool throughWalls = config.renderBoxes && config.renderBoxThroughWalls;
+    if (noteBlocks.empty() || (!config.renderText && !throughWalls)) return;
     auto clientRef = ll::service::getClientInstance();
     if (!clientRef.has_value() || !clientRef.value().getLocalPlayer()) return;
     CameraSnapshot camera;
@@ -343,6 +346,22 @@ void NoteBlockRenderer::render(const NoteBlockManager& manager, const NoteBotCon
         camera = cameraSnapshot;
     }
     if (!camera.hasView || !camera.hasWorldPosition) return;
+
+    if (throughWalls) {
+        // Draw after the world, without its depth buffer. Keep transparent faces ordered.
+        std::stable_sort(overlay.blocks.begin(), overlay.blocks.end(), [&](const WorldOutline& a, const WorldOutline& b) {
+            const auto distanceSquared = [&](const BlockPos& pos) {
+                const glm::vec3 offset = glm::vec3(float(pos.x) + 0.5f, float(pos.y) + 0.5f,
+                                                  float(pos.z) + 0.5f) - camera.worldPosition;
+                return glm::dot(offset, offset);
+            };
+            return distanceSquared(a.pos) > distanceSquared(b.pos);
+        });
+        for (const auto& block : overlay.blocks) {
+            renderBox(block.pos, block.sideColor.data(), block.lineColor.data(), config,
+                      camera.viewProjection, camera.worldPosition);
+        }
+    }
 
     for (const auto& block : noteBlocks) {
         const auto target = targetPitches.find(block.pos);
@@ -357,11 +376,16 @@ void NoteBlockRenderer::render(const NoteBlockManager& manager, const NoteBotCon
 }
 
 void NoteBlockRenderer::renderBox(const BlockPos& pos, const float* sideColor, const float* lineColor,
-                                  const glm::mat4& viewProjection, const glm::vec3& cameraWorld) {
+                                  const NoteBotConfig& config, const glm::mat4& viewProjection,
+                                  const glm::vec3& cameraWorld) {
+    const float expansion = std::clamp(config.boxExpansion, 0.0f, 0.08f);
+    const glm::vec3 minimum = glm::vec3(float(pos.x), float(pos.y), float(pos.z)) - expansion;
+    const glm::vec3 maximum = glm::vec3(float(pos.x) + 1.0f, float(pos.y) + 1.0f, float(pos.z) + 1.0f) + expansion;
     std::array<glm::vec4, 8> corners;
     for (int i = 0; i < 8; ++i) {
-        const glm::vec3 world(float(pos.x + (i & 1)), float(pos.y + ((i >> 1) & 1)),
-                              float(pos.z + ((i >> 2) & 1)));
+        const glm::vec3 world((i & 1) ? maximum.x : minimum.x,
+                              (i & 2) ? maximum.y : minimum.y,
+                              (i & 4) ? maximum.z : minimum.z);
         corners[i] = viewProjection * glm::vec4(world - cameraWorld, 1.0f);
     }
 
@@ -370,16 +394,45 @@ void NoteBlockRenderer::renderBox(const BlockPos& pos, const float* sideColor, c
         ImVec4(sideColor[0], sideColor[1], sideColor[2], sideColor[3]));
     const ImU32 line = ImGui::ColorConvertFloat4ToU32(
         ImVec4(lineColor[0], lineColor[1], lineColor[2], lineColor[3]));
-    if (corners[2].w > 0.05f && corners[3].w > 0.05f &&
-        corners[7].w > 0.05f && corners[6].w > 0.05f) {
+    if (config.renderBoxFaces && sideColor[3] > 0.0f) {
+        static constexpr std::array<std::array<int, 4>, 6> faces{{
+            {{0, 2, 6, 4}}, {{1, 5, 7, 3}}, {{0, 4, 5, 1}},
+            {{2, 3, 7, 6}}, {{0, 1, 3, 2}}, {{4, 6, 7, 5}}
+        }};
         const auto size = ImGui::GetIO().DisplaySize;
-        auto screen = [size](const glm::vec4& clip) {
-            return ImVec2((clip.x / clip.w * 0.5f + 0.5f) * size.x,
-                          (0.5f - clip.y / clip.w * 0.5f) * size.y);
-        };
-        draw->AddQuadFilled(screen(corners[2]), screen(corners[3]),
-                            screen(corners[7]), screen(corners[6]), fill);
+        for (size_t face = 0; face < faces.size(); ++face) {
+            const int axis = static_cast<int>(face / 2);
+            // Only the outward faces toward the camera, to avoid stacking cube alpha.
+            if ((face % 2 == 0 && cameraWorld[axis] >= minimum[axis]) ||
+                (face % 2 != 0 && cameraWorld[axis] <= maximum[axis])) continue;
+            std::array<ImVec2, 5> polygon;
+            int count = 0;
+            constexpr float nearW = 0.05f;
+            const auto append = [&](const glm::vec4& clip) {
+                polygon[count++] = ImVec2((clip.x / clip.w * 0.5f + 0.5f) * size.x,
+                                          (0.5f - clip.y / clip.w * 0.5f) * size.y);
+            };
+            for (size_t edge = 0; edge < 4; ++edge) {
+                const auto& a = corners[faces[face][edge]];
+                const auto& b = corners[faces[face][(edge + 1) % 4]];
+                if (a.w > nearW) append(a);
+                if ((a.w > nearW) != (b.w > nearW))
+                    append(glm::mix(a, b, (nearW - a.w) / (b.w - a.w)));
+            }
+            if (count < 3 || !std::all_of(polygon.begin(), polygon.begin() + count,
+                [](const ImVec2& point) { return std::isfinite(point.x) && std::isfinite(point.y); })) continue;
+            // ImGui expects clockwise convex polygons for anti-aliased fills.
+            float area = 0.0f;
+            for (int index = 0; index < count; ++index) {
+                const auto& a = polygon[index];
+                const auto& b = polygon[(index + 1) % count];
+                area += a.x * b.y - b.x * a.y;
+            }
+            if (area < 0.0f) std::reverse(polygon.begin(), polygon.begin() + count);
+            draw->AddConvexPolyFilled(polygon.data(), count, fill);
+        }
     }
+    if (!config.renderBoxLines || lineColor[3] <= 0.0f) return;
     for (int i = 0; i < 8; ++i) {
         for (int axis = 0; axis < 3; ++axis) {
             if ((i & (1 << axis)) == 0) {

@@ -63,6 +63,8 @@
   "notebot.ui.render_text_tip": "在音符盒上方显示音高",
   "notebot.ui.render_boxes": "显示轮廓",
   "notebot.ui.render_boxes_tip": "显示音符盒轮廓",
+  "notebot.ui.render_through_walls": "穿墙渲染",
+  "notebot.ui.render_through_walls_tip": "穿过墙体显示音符盒的线框和填充面",
   "notebot.ui.lines": "线框",
   "notebot.ui.sides": "填充面",
   "notebot.ui.both": "线框和填充面",

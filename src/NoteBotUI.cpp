@@ -193,6 +193,7 @@ void NoteBotUI::syncMeteorSettingsFromConfig() {
     settings.checkNoteblocksAgainDelay = config.checkNoteblocksDelay;
     settings.renderText = config.renderText;
     settings.renderBoxes = config.renderBoxes;
+    settings.renderBoxThroughWalls = config.renderBoxThroughWalls;
     settings.shapeMode = config.renderBoxLines && config.renderBoxFaces ? 2
                        : config.renderBoxFaces ? 1 : 0;
     settings.noteTextScale = config.noteTextScale;
@@ -227,6 +228,7 @@ void NoteBotUI::applyMeteorSettings() {
     config.checkNoteblocksDelay = settings.checkNoteblocksAgainDelay;
     config.renderText = settings.renderText;
     config.renderBoxes = settings.renderBoxes;
+    config.renderBoxThroughWalls = settings.renderBoxThroughWalls;
     config.renderBoxLines = settings.shapeMode == 0 || settings.shapeMode == 2;
     config.renderBoxFaces = settings.shapeMode != 0;
     config.noteTextScale = settings.noteTextScale;
