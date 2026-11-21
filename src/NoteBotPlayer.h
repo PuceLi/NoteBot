@@ -19,6 +19,7 @@ public:
     struct DisplayState {
         bool hasSong = false;
         bool isPlaying = false;
+        bool isPaused = false;
         bool isPreview = false;
         int currentTick = 0;
         int totalTicks = 0;
@@ -34,6 +35,7 @@ public:
     bool previewSong(const std::filesystem::path& filePath);
     void play();
     void pause();
+    void togglePlayback();
     void stop();
     void requestClearNoteBlocks() noexcept {
         mPendingScanRadius.store(-1, std::memory_order_release);
@@ -103,7 +105,6 @@ private:
     std::atomic<bool> mWorldPaused{false};
     uint64_t mLastSimulationTick = 0;
     bool mHasSimulationTick = false;
-    uint64_t mNextWorldPlaybackTick = 0;
     bool mHasWorldPlaybackTick = false;
     std::chrono::steady_clock::time_point mLastSimulationAdvance;
     std::vector<TuneTarget> mTuneTargets;

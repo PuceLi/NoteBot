@@ -301,13 +301,15 @@ void NotebotUi::updateRainbowColors() {
 
 void NotebotUi::drawModule() {
     iconTextures={resetIcon,copyIcon,pasteIcon};
-    if (binding_) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) binding_=false;
+    if (isBindingKey()) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) binding_=BindTarget::None;
         else for (int key=ImGuiKey_NamedKey_BEGIN;key<ImGuiKey_NamedKey_END;++key) {
-            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key))) {
-                keybind=ImGui::GetKeyName(static_cast<ImGuiKey>(key));
-                binding_=false;
-                if (actions.bindChanged) actions.bindChanged(keybind);
+            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false)) {
+                auto& value = binding_ == BindTarget::Playback ? playbackKeybind : keybind;
+                auto& callback = binding_ == BindTarget::Playback ? actions.playbackBindChanged : actions.bindChanged;
+                value=ImGui::GetKeyName(static_cast<ImGuiKey>(key));
+                binding_=BindTarget::None;
+                if (callback) callback(value);
                 break;
             }
         }
@@ -354,15 +356,16 @@ void NotebotUi::drawModule() {
                 "Play songs with nearby note blocks");
             ImGui::TextUnformatted(description.c_str());
             const auto github = translate("notebot.ui.github", "GitHub");
-            ImGui::Text("%s: https://github.com/PuceLI/NoteBot", github.c_str());
+            ImGui::Text("%s: https://github.com/PuceLi/NoteBot", github.c_str());
             bool changed=false;
             const NotebotSettings defaults{};
             const auto general = translate("notebot.ui.general", "General");
             if (section(general.c_str(),generalExpanded_,width)) {
-                const auto tickDelay = translate("notebot.ui.tick_delay", "Tick Delay");
-                const auto tickDelayTip = translate("notebot.ui.tick_delay_tip",
-                    "Extra delay between song ticks (0 = fastest).");
-                changed |= intRow(tickDelay.c_str(),tickDelayTip.c_str(),settings.tickDelay,defaults.tickDelay,0,20,width);
+                const auto playbackSpeed = translate("notebot.ui.playback_speed", "Playback Speed");
+                const auto playbackSpeedTip = translate("notebot.ui.playback_speed_tip",
+                    "Playback speed during playing or previewing");
+                changed |= floatRow(playbackSpeed.c_str(),playbackSpeedTip.c_str(),settings.playbackSpeed,defaults.playbackSpeed,0.02f,2.0f,width);
+                settings.playbackSpeed = std::round(settings.playbackSpeed * 100.0f) / 100.0f;
                 const auto tuneInterval = translate("notebot.ui.tune_interval", "Tune Interval (ticks)");
                 const auto tuneIntervalTip = translate("notebot.ui.tune_interval_tip",
                     "Extra world ticks between confirmed tuning clicks (0 = fastest).");
@@ -444,6 +447,10 @@ void NotebotUi::drawModule() {
                 const auto renderBoxesTip = translate("notebot.ui.render_boxes_tip",
                     "Whether to render noteblock outlines");
                 changed |= boolRow(renderBoxes.c_str(),renderBoxesTip.c_str(),settings.renderBoxes,defaults.renderBoxes,width);
+                const auto throughWalls = translate("notebot.ui.render_through_walls", "Render Through Walls");
+                const auto throughWallsTip = translate("notebot.ui.render_through_walls_tip",
+                    "Show note-block outlines and filled faces through walls");
+                changed |= boolRow(throughWalls.c_str(),throughWallsTip.c_str(),settings.renderBoxThroughWalls,defaults.renderBoxThroughWalls,width);
                 const auto lines = translate("notebot.ui.lines", "Lines");
                 const auto sides = translate("notebot.ui.sides", "Sides");
                 const auto both = translate("notebot.ui.both", "Both");
@@ -526,12 +533,18 @@ void NotebotUi::drawModule() {
             if (button(clearNoteBlocks.c_str(),(width-3)/2) && actions.clearNoteBlocks) actions.clearNoteBlocks();
             const auto bindSection = translate("notebot.ui.bind", "Bind");
             if (section(bindSection.c_str(),bindExpanded_,width)) {
-                const auto bindLabel = translate("notebot.ui.bind_label", "Bind:");
+                const auto bindLabel = translate("notebot.ui.bind_label", "Open UI:");
                 Row row=beginRow(bindLabel.c_str(),nullptr,width);
-                const auto bindingLabel = binding_ ? std::string("...") : keybindLabel(keybind);
-                if (button(bindingLabel.c_str(),rowControlWidth(row))) binding_=true;
-                if (resetAt(row)) { keybind="L"; binding_=false; if(actions.bindChanged) actions.bindChanged(keybind); }
+                const auto bindingLabel = binding_ == BindTarget::Interface ? std::string("...") : keybindLabel(keybind);
+                if (button(bindingLabel.c_str(),rowControlWidth(row))) binding_=BindTarget::Interface;
+                if (resetAt(row)) { keybind="L"; binding_=BindTarget::None; if(actions.bindChanged) actions.bindChanged(keybind); }
                 finishRow(row);
+                const auto playbackBindLabel = translate("notebot.ui.playback_bind_label", "Play / Pause:");
+                Row playbackRow=beginRow(playbackBindLabel.c_str(),nullptr,width);
+                const auto playbackBindingLabel = binding_ == BindTarget::Playback ? std::string("...") : keybindLabel(playbackKeybind);
+                if (button(playbackBindingLabel.c_str(),rowControlWidth(playbackRow))) binding_=BindTarget::Playback;
+                if (resetAt(playbackRow)) { playbackKeybind="P"; binding_=BindTarget::None; if(actions.playbackBindChanged) actions.playbackBindChanged(playbackKeybind); }
+                finishRow(playbackRow);
             }
             ImGui::EndGroup();
             ImGui::Dummy(ImVec2(1,8));

@@ -16,7 +16,8 @@ public:
 
 private:
     void renderBox(const BlockPos& pos, const float* sideColor, const float* lineColor,
-                   const glm::mat4& viewProjection, const glm::vec3& cameraWorld);
+                   const NoteBotConfig& config, const glm::mat4& viewProjection,
+                   const glm::vec3& cameraWorld);
     void renderText(const BlockPos& pos, int pitch, int remainingHits, const NoteBotConfig& config,
                     const glm::mat4& viewProjection, const glm::vec3& cameraWorld);
 

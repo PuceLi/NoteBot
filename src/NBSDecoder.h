@@ -2,6 +2,7 @@
 
 #include "NoteData.h"
 #include <filesystem>
+#include <iosfwd>
 #include <optional>
 #include <string>
 
@@ -23,7 +24,7 @@ private:
     static uint8_t  readByte(std::ifstream& stream);
     static uint16_t readShort(std::ifstream& stream);
     static int32_t  readInt(std::ifstream& stream);
-    static std::string readString(std::ifstream& stream, int nbsVersion);
+    static std::string readString(std::ifstream& stream);
     static Instrument fromNBSInstrument(uint8_t instrument);
 };
 

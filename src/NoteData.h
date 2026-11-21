@@ -34,6 +34,10 @@ inline constexpr Instrument nbsInstrument(uint8_t instrument) {
     case 13: return Instrument::Bit;
     case 14: return Instrument::Banjo;
     case 15: return Instrument::Pling;
+    case 16: return Instrument::Trumpet;
+    case 17: return Instrument::TrumpetExposed;
+    case 18: return Instrument::TrumpetWeathered;
+    case 19: return Instrument::TrumpetOxidized;
     default: return static_cast<Instrument>(instrument);
     }
 }

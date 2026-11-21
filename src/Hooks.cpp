@@ -27,6 +27,7 @@
 #include "mc/network/packet/PlayerAuthInputPacket.h"
 
 #include <imgui.h>
+#include <array>
 #include <variant>
 
 namespace notebot {
@@ -35,10 +36,14 @@ extern std::unique_ptr<NoteBotPlayer> gPlayer;
 extern std::unique_ptr<NoteBotUI>     gUI;
 extern std::unique_ptr<NoteBlockRenderer> gRenderer;
 
+static void registerGameplayHooks();
+static void unregisterGameplayHooks();
+
 static ll::event::ListenerPtr keyListener;
 static ll::event::ListenerPtr mouseListener;
 static std::atomic<bool> uiMouseActive{false};
 static std::atomic<bool> restoreGameMouse{false};
+static std::array<bool, 256> pressedKeys{};
 
 static std::optional<NoteBlockInteraction::ModelRotation> getAutoRotatePose(LocalPlayer* player) {
     if (!gPlayer || !gPlayer->getConfig().autoRotate || !player) return std::nullopt;
@@ -74,15 +79,28 @@ void RenderNoteBotUI() {
 }
 
 void installInputHooks() {
+    if (keyListener || mouseListener) return;
+    registerGameplayHooks();
     auto& bus = ll::event::EventBus::getInstance();
     auto& logger = NoteBot::getInstance().getSelf().getLogger();
 
-    keyListener = bus.emplaceListener<ll::event::input::KeyInputEvent>([&logger](auto& event) {
+    keyListener = bus.emplaceListener<ll::event::input::KeyInputEvent>([](ll::event::KeyInputEvent& event) {
+        auto& logger = NoteBot::getInstance().getSelf().getLogger();
+        const int key = event.keyCode();
+        if (key <= 0 || key >= static_cast<int>(pressedKeys.size())) return;
+        const bool repeated = pressedKeys[key];
+        pressedKeys[key] = event.isDown();
         if (!event.isDown()) return;
         if (event.controller().mTextboxIsFocused || event.controller().mTextboxIsSelected) return;
+        if (gUI && gUI->isCapturingKeyboard()) {
+            event.cancel();
+            return;
+        }
 
         auto& cfg = getConfig();
         if (event.keyCode() == cfg.keybinds.hotkey) {
+            event.cancel();
+            if (repeated) return;
             logger.info("Hotkey pressed (0x{:X}), toggling UI", event.keyCode());
             if (gUI) {
                 gUI->toggle();
@@ -91,7 +109,13 @@ void installInputHooks() {
             } else {
                 logger.warn("gUI is null");
             }
+            return;
+        }
+
+        if (event.keyCode() == cfg.keybinds.playPause) {
             event.cancel();
+            if (!repeated && gPlayer) gPlayer->togglePlayback();
+            return;
         }
 
         if (gUI && gUI->isVisible() && event.keyCode() == 0x1B) {
@@ -99,7 +123,7 @@ void installInputHooks() {
         }
     });
 
-    mouseListener = bus.emplaceListener<ll::event::input::MouseInputEvent>([](auto& event) {
+    mouseListener = bus.emplaceListener<ll::event::input::MouseInputEvent>([](ll::event::MouseInputEvent& event) {
         if (gUI && gUI->isVisible()) event.cancel();
     });
 
@@ -107,6 +131,8 @@ void installInputHooks() {
 }
 
 void uninstallInputHooks() {
+    unregisterGameplayHooks();
+    pressedKeys.fill(false);
     if (gUI) gUI->setVisible(false);
     if (auto client = ll::service::getClientInstance()) syncUiMouse(*client);
     if (keyListener) {
@@ -119,7 +145,7 @@ void uninstallInputHooks() {
     }
 }
 
-LL_AUTO_TYPE_INSTANCE_HOOK(
+LL_TYPE_INSTANCE_HOOK(
     NoteBotInputTickHook,
     ll::memory::HookPriority::Normal,
     InputHandler,
@@ -144,7 +170,7 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
     syncUiMouse(client);
 }
 
-LL_AUTO_TYPE_INSTANCE_HOOK(
+LL_TYPE_INSTANCE_HOOK(
     NoteBotModelRotationHook,
     ll::memory::HookPriority::Normal,
     LevelRendererCamera,
@@ -195,7 +221,7 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
     origin(context, renderObject, client);
 }
 
-LL_AUTO_TYPE_INSTANCE_HOOK(
+LL_TYPE_INSTANCE_HOOK(
     NoteBotUiMouseGrabHook,
     ll::memory::HookPriority::Normal,
     ClientInstance,
@@ -210,7 +236,7 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
     origin();
 }
 
-LL_AUTO_TYPE_INSTANCE_HOOK(
+LL_TYPE_INSTANCE_HOOK(
     NoteBlockUsePacketProbe,
     ll::memory::HookPriority::Normal,
     LoopbackPacketSender,
@@ -267,7 +293,7 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
 const auto noteBlockEventHandler = static_cast<void (LegacyClientNetworkHandler::*)(
     NetworkIdentifier const&, BlockEventPacket const&)>(&LegacyClientNetworkHandler::$handle);
 
-LL_AUTO_TYPE_INSTANCE_HOOK(
+LL_TYPE_INSTANCE_HOOK(
     NoteBlockEventHook,
     ll::memory::HookPriority::Normal,
     LegacyClientNetworkHandler,
@@ -288,7 +314,7 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
     NoteBlockInteraction::recordNoteEvent(packet.mPos, packet.mB1);
 }
 
-LL_AUTO_TYPE_INSTANCE_HOOK(
+LL_TYPE_INSTANCE_HOOK(
     NoteBotLevelExitHook,
     ll::memory::HookPriority::Normal,
     ClientInstance,
@@ -299,6 +325,24 @@ LL_AUTO_TYPE_INSTANCE_HOOK(
     NoteBlockInteraction::clearRenderRotation();
     if (gPlayer) gPlayer->requestWorldExit();
     origin();
+}
+
+// Keep gameplay hooks scoped to the mod's enabled lifetime.
+using GameplayHooks = ll::memory::HookRegistrar<
+    NoteBotInputTickHook,
+    NoteBotModelRotationHook,
+    NoteBotUiMouseGrabHook,
+    NoteBlockUsePacketProbe,
+    NoteBlockEventHook,
+    NoteBotLevelExitHook>;
+static std::unique_ptr<GameplayHooks> gameplayHooks;
+
+static void registerGameplayHooks() {
+    if (!gameplayHooks) gameplayHooks = std::make_unique<GameplayHooks>();
+}
+
+static void unregisterGameplayHooks() {
+    gameplayHooks.reset();
 }
 
 } // namespace notebot

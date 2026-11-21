@@ -28,10 +28,11 @@ struct ColorConfig {
 
 struct KeybindsConfig {
     int hotkey = 0x4C; // L 键
+    int playPause = 0x50; // P 键
 };
 
 struct NoteBotConfig {
-    int version = 9;
+    int version = 12;
 
     enum class NotebotMode {
         Manual = 0,
@@ -50,6 +51,7 @@ struct NoteBotConfig {
     int checkNoteblocksDelay = 1;
 
     bool renderBoxes = true;
+    bool renderBoxThroughWalls = false;
     bool renderBoxLines = false;
     bool renderBoxFaces = true;
     bool showUnmappedBoxes = false;
@@ -60,7 +62,7 @@ struct NoteBotConfig {
     float boxExpansion = 0.0f;
 
     // 播放配置
-    int tickDelay = 0;
+    float playbackSpeed = 1.0f;
     int tuneIntervalTicks = 0;
     bool polyphonic = true;
     bool autoRotate = true;

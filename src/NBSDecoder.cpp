@@ -2,11 +2,10 @@
 #include "ui/translation.h"
 
 #include <algorithm>
-#include <array>
+#include <fstream>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
-#include <string_view>
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -16,18 +15,16 @@
 namespace notebot {
 namespace {
 
-constexpr std::string_view replacementCharacter = "\xEF\xBF\xBD";
-
 std::string normalizeTextEncoding(std::string text) {
     if (text.empty() || text.size() > static_cast<size_t>(std::numeric_limits<int>::max())) return text;
     const int inputLength = static_cast<int>(text.size());
     if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), inputLength, nullptr, 0) > 0)
         return text;
 
-    const int wideLength = MultiByteToWideChar(CP_ACP, 0, text.data(), inputLength, nullptr, 0);
+    const int wideLength = MultiByteToWideChar(1252, 0, text.data(), inputLength, nullptr, 0);
     if (wideLength <= 0) return {};
     std::wstring wide(static_cast<size_t>(wideLength), L'\0');
-    if (MultiByteToWideChar(CP_ACP, 0, text.data(), inputLength, wide.data(), wideLength) != wideLength)
+    if (MultiByteToWideChar(1252, 0, text.data(), inputLength, wide.data(), wideLength) != wideLength)
         return {};
 
     const int utf8Length = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(), wideLength,
@@ -56,7 +53,7 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
     try {
         Song   song;
         int    nbsVersion = 0;
-        uint8_t firstCustomInstrument = 16;
+        uint8_t firstCustomInstrument = 10; // Legacy NBS has ten built-in instruments.
         const uint16_t length = readShort(file);
 
         if (length == 0) {
@@ -66,7 +63,7 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
                     "Unsupported NBS version {0} (supported versions: 1-6)", nbsVersion)};
             }
             firstCustomInstrument = readByte(file);
-            if (firstCustomInstrument < 16) {
+            if (firstCustomInstrument > 20) {
                 return {std::nullopt, ui::format("notebot.decoder.invalid_custom_id",
                     "Invalid first custom instrument ID {0}", firstCustomInstrument)};
             }
@@ -74,14 +71,14 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
         }
 
         const uint16_t layerCount = readShort(file);
-        song.title  = readString(file, nbsVersion);
+        song.title  = readString(file);
         if (song.title.find_first_not_of(" \t\r\n") == std::string::npos) {
             const auto filename = filePath.stem().u8string();
             song.title.assign(reinterpret_cast<const char*>(filename.data()), filename.size());
         }
-        song.author = readString(file, nbsVersion);
-        readString(file, nbsVersion);
-        readString(file, nbsVersion);
+        song.author = readString(file);
+        readString(file);
+        readString(file);
 
         const float speed = readShort(file) / 100.0f;
         if (speed <= 0.0f) {
@@ -96,7 +93,7 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
         readInt(file);
         readInt(file);
         readInt(file);
-        readString(file, nbsVersion);
+        readString(file);
 
         if (nbsVersion >= 4) {
             readByte(file);
@@ -104,13 +101,13 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
             readShort(file);
         }
 
-        double tick = -1;
+        int64_t tick = -1;
         while (true) {
             const uint16_t jumpTicks = readShort(file);
             if (jumpTicks == 0) break;
 
-            tick += jumpTicks * (20.0f / speed);
-            const double roundedTick = std::round(tick);
+            tick += jumpTicks;
+            const double roundedTick = std::round(static_cast<double>(tick) * 20.0 / speed);
             if (!std::isfinite(roundedTick) || roundedTick < std::numeric_limits<int>::min() ||
                 roundedTick > std::numeric_limits<int>::max()) {
                 return {std::nullopt, ui::format("notebot.decoder.timing_out_of_range",
@@ -162,7 +159,7 @@ NBSDecoder::DecodeResult NBSDecoder::decodeWithError(const std::filesystem::path
             std::vector<float> authoredLayerPans(layerCount, 0.0f);
             if (file.peek() != std::char_traits<char>::eof()) {
                 for (auto& layerPan : authoredLayerPans) {
-                    readString(file, nbsVersion);
+                    readString(file);
                     if (nbsVersion >= 4) readByte(file); // Layer lock.
                     readByte(file); // Layer volume.
                     if (nbsVersion >= 2)
@@ -253,7 +250,7 @@ int32_t NBSDecoder::readInt(std::ifstream& stream) {
     return static_cast<int32_t>(byte1 | (byte2 << 8) | (byte3 << 16) | (byte4 << 24));
 }
 
-std::string NBSDecoder::readString(std::ifstream& stream, int nbsVersion) {
+std::string NBSDecoder::readString(std::ifstream& stream) {
     const int32_t length = readInt(stream);
     constexpr int32_t maxStringLength = 1024 * 1024;
     if (length < 0 || length > maxStringLength) {
@@ -261,87 +258,21 @@ std::string NBSDecoder::readString(std::ifstream& stream, int nbsVersion) {
             "Invalid NBS string length"));
     }
 
-    std::string result;
-    if (nbsVersion >= 6) {
-        // NBS v6 stores the number of UTF-8 characters, not the byte count.
-        result.reserve(static_cast<size_t>(length));
-        for (int32_t character = 0; character < length; ++character) {
-            const uint8_t first = readByte(stream);
-            int continuationCount = 0;
-            uint32_t codepoint = 0;
-            if (first <= 0x7F) {
-                codepoint = first;
-            } else if (first >= 0xC2 && first <= 0xDF) {
-                continuationCount = 1;
-                codepoint = first & 0x1F;
-            } else if (first >= 0xE0 && first <= 0xEF) {
-                continuationCount = 2;
-                codepoint = first & 0x0F;
-            } else if (first >= 0xF0 && first <= 0xF4) {
-                continuationCount = 3;
-                codepoint = first & 0x07;
-            } else {
-                // Bad metadata must not prevent the note data from being used.
-                // Consume one declared character and emit valid UTF-8 for ImGui.
-                result.append(replacementCharacter);
-                continue;
-            }
-
-            std::array<uint8_t, 3> continuationBytes{};
-            int consumedContinuations = 0;
-            bool valid = true;
-            for (int index = 0; index < continuationCount; ++index) {
-                const uint8_t continuation = readByte(stream);
-                if ((continuation & 0xC0) != 0x80) {
-                    // This byte may be the start of the next character. Put it
-                    // back so the declared character count remains aligned.
-                    stream.clear();
-                    stream.seekg(-1, std::ios::cur);
-                    valid = false;
-                    break;
-                }
-                continuationBytes[static_cast<size_t>(index)] = continuation;
-                ++consumedContinuations;
-                codepoint = (codepoint << 6) | (continuation & 0x3F);
-            }
-
-            if ((continuationCount == 1 && codepoint < 0x80) ||
-                (continuationCount == 2 && codepoint < 0x800) ||
-                (continuationCount == 3 && codepoint < 0x10000) ||
-                (codepoint >= 0xD800 && codepoint <= 0xDFFF) || codepoint > 0x10FFFF ||
-                (first == 0xE0 && continuationBytes[0] < 0xA0) ||
-                (first == 0xED && continuationBytes[0] >= 0xA0) ||
-                (first == 0xF0 && continuationBytes[0] < 0x90) ||
-                (first == 0xF4 && continuationBytes[0] >= 0x90)) {
-                valid = false;
-            }
-
-            if (!valid) {
-                result.append(replacementCharacter);
-                continue;
-            }
-
-            result.push_back(static_cast<char>(first));
-            for (int index = 0; index < consumedContinuations; ++index)
-                result.push_back(static_cast<char>(continuationBytes[static_cast<size_t>(index)]));
-        }
-    } else {
-        const auto start = stream.tellg();
-        stream.seekg(0, std::ios::end);
-        const auto end = stream.tellg();
-        if (start == std::streampos(-1) || end == std::streampos(-1) || end - start < length) {
-            throw std::runtime_error(ui::translate("notebot.decoder.truncated_string",
-                "Truncated NBS string"));
-        }
-        stream.seekg(start);
-
-        result.resize(static_cast<size_t>(length));
-        if (length > 0 && !stream.read(result.data(), length)) {
-            throw std::runtime_error(ui::translate("notebot.decoder.read_string",
-                "Could not read NBS string"));
-        }
-        result = normalizeTextEncoding(std::move(result));
+    const auto start = stream.tellg();
+    stream.seekg(0, std::ios::end);
+    const auto end = stream.tellg();
+    if (start == std::streampos(-1) || end == std::streampos(-1) || end - start < length) {
+        throw std::runtime_error(ui::translate("notebot.decoder.truncated_string",
+            "Truncated NBS string"));
     }
+    stream.seekg(start);
+
+    std::string result(static_cast<size_t>(length), '\0');
+    if (length > 0 && !stream.read(result.data(), length)) {
+        throw std::runtime_error(ui::translate("notebot.decoder.read_string",
+            "Could not read NBS string"));
+    }
+    result = normalizeTextEncoding(std::move(result));
     std::replace(result.begin(), result.end(), '\r', ' ');
     return result;
 }

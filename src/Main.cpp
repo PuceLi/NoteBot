@@ -5,7 +5,6 @@
 #include "NoteBlockRenderer.h"
 #include "ImGuiManager.h"
 
-#include "ll/api/memory/Hook.h"
 #include "ll/api/i18n/I18n.h"
 #include "ll/api/mod/RegisterHelper.h"
 

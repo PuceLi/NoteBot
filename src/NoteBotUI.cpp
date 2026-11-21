@@ -118,14 +118,11 @@ void NoteBotUI::setPlayer(NoteBotPlayer* player) {
     if (!mMeteorUI || !mPlayer) return;
     syncMeteorSettingsFromConfig();
     mMeteorUI->keybind = keyNameFromCode(mPlayer->getConfig().keybinds.hotkey);
+    mMeteorUI->playbackKeybind = keyNameFromCode(mPlayer->getConfig().keybinds.playPause);
     auto& actions = mMeteorUI->actions;
     actions.loadSong = [this](const fs::path& path) { mPlayer->loadSong(path); };
     actions.previewSong = [this](const fs::path& path) { mPlayer->previewSong(path); };
-    actions.pauseResume = [this] {
-        const auto state = mPlayer->getDisplayState();
-        if (!state.hasSong) return;
-        if (state.isPlaying) mPlayer->pause(); else mPlayer->play();
-    };
+    actions.pauseResume = [this] { mPlayer->togglePlayback(); };
     actions.stop = [this] { mPlayer->stop(); };
     actions.scanNoteBlocks = [this] {
         mPlayer->requestScanNearbyNoteBlocks(mPlayer->getConfig().general.scanRadius);
@@ -167,6 +164,15 @@ void NoteBotUI::setPlayer(NoteBotPlayer* player) {
         mPlayer->getConfig().keybinds.hotkey = code;
         markConfigEdited();
     };
+    actions.playbackBindChanged = [this](const std::string& name) {
+        const int code = keyCodeFromName(name);
+        if (code < 0) {
+            mMeteorUI->playbackKeybind = keyNameFromCode(mPlayer->getConfig().keybinds.playPause);
+            return;
+        }
+        mPlayer->getConfig().keybinds.playPause = code;
+        markConfigEdited();
+    };
 }
 
 void NoteBotUI::syncMeteorSettingsFromConfig() {
@@ -174,7 +180,7 @@ void NoteBotUI::syncMeteorSettingsFromConfig() {
     const auto& config = mPlayer->getConfig();
     auto& settings = mMeteorUI->settings;
     mMeteorUI->showNowPlaying = config.showNowPlaying;
-    settings.tickDelay = config.tickDelay;
+    settings.playbackSpeed = config.playbackSpeed;
     settings.tuneIntervalTicks = config.tuneIntervalTicks;
     settings.mode = config.mode == NoteBotConfig::NotebotMode::Manual ? 1 : 0;
     settings.playingMode = static_cast<int>(config.playingMode);
@@ -187,6 +193,7 @@ void NoteBotUI::syncMeteorSettingsFromConfig() {
     settings.checkNoteblocksAgainDelay = config.checkNoteblocksDelay;
     settings.renderText = config.renderText;
     settings.renderBoxes = config.renderBoxes;
+    settings.renderBoxThroughWalls = config.renderBoxThroughWalls;
     settings.shapeMode = config.renderBoxLines && config.renderBoxFaces ? 2
                        : config.renderBoxFaces ? 1 : 0;
     settings.noteTextScale = config.noteTextScale;
@@ -207,7 +214,7 @@ void NoteBotUI::applyMeteorSettings() {
     if (!mPlayer || !mMeteorUI) return;
     const auto& settings = mMeteorUI->settings;
     auto& config = mPlayer->getConfig();
-    config.tickDelay = settings.tickDelay;
+    config.playbackSpeed = settings.playbackSpeed;
     config.tuneIntervalTicks = settings.tuneIntervalTicks;
     config.mode = settings.mode == 1 ? NoteBotConfig::NotebotMode::Manual
                                       : NoteBotConfig::NotebotMode::Auto;
@@ -221,6 +228,7 @@ void NoteBotUI::applyMeteorSettings() {
     config.checkNoteblocksDelay = settings.checkNoteblocksAgainDelay;
     config.renderText = settings.renderText;
     config.renderBoxes = settings.renderBoxes;
+    config.renderBoxThroughWalls = settings.renderBoxThroughWalls;
     config.renderBoxLines = settings.shapeMode == 0 || settings.shapeMode == 2;
     config.renderBoxFaces = settings.shapeMode != 0;
     config.noteTextScale = settings.noteTextScale;
@@ -290,6 +298,8 @@ void NoteBotUI::render() {
     if (mPlayer) renderNowPlaying();
     if (isVisible() && clickedOutsideImGui())
         setVisible(false);
+    mCapturingKeyboard.store(isVisible() && mMeteorUI &&
+        (mMeteorUI->isBindingKey() || ImGui::GetIO().WantTextInput), std::memory_order_release);
     if (mConfigDirty && std::chrono::steady_clock::now() - mLastConfigEdit >=
                             std::chrono::milliseconds(750)) {
         try {
@@ -303,8 +313,9 @@ void NoteBotUI::render() {
 }
 
 void NoteBotUI::renderNowPlaying() {
-    if (!mPlayer->getConfig().showNowPlaying || (!mPlayer->isPlaying() && !isVisible())) return;
+    if (!mPlayer->getConfig().showNowPlaying) return;
     const auto display = mPlayer->getDisplayState();
+    if (!display.isPlaying && !display.isPaused && !isVisible()) return;
     const auto* viewport = ImGui::GetMainViewport();
     const auto defaultPosition = ImVec2(viewport->GetCenter().x, viewport->Pos.y + 72.0f);
     if (mResetNowPlayingRequested) {
@@ -338,10 +349,12 @@ void NoteBotUI::renderNowPlaying() {
         }
         const auto noSong = ui::translate("notebot.ui.no_song", "No song");
         const char* title = display.songTitle.empty() ? noSong.c_str() : display.songTitle.c_str();
+        const float titleX = titlePos.x + std::max(0.0f,
+            (ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(title).x) * 0.5f);
         const float titleY = titlePos.y + (ImGui::GetFrameHeight() - ImGui::GetTextLineHeight()) * 0.5f;
         ImGui::GetWindowDrawList()->PushClipRect(titlePos,
             ImVec2(titlePos.x + titleWidth, titlePos.y + ImGui::GetFrameHeight()), true);
-        ImGui::GetWindowDrawList()->AddText(ImVec2(titlePos.x, titleY),
+        ImGui::GetWindowDrawList()->AddText(ImVec2(titleX, titleY),
                                              ImGui::GetColorU32(ImGuiCol_Text), title);
         ImGui::GetWindowDrawList()->PopClipRect();
         if (editable) {
