@@ -1,4 +1,5 @@
 #pragma once
+#include "../UiAppearance.h"
 
 #include "ll/api/i18n/I18n.h"
 #include "ll/api/service/TargetedBedrock.h"
@@ -13,6 +14,11 @@
 namespace notebot::ui {
 
 inline std::string_view minecraftLocaleCode() {
+    switch (uiLanguageOverride.load(std::memory_order_relaxed)) {
+    case 1: return "zh_CN";
+    case 2: return "en_US";
+    default: break;
+    }
     const auto client = ll::service::getClientInstance();
     if (!client) return "en_US";
     const auto language = client->getOptions().getLanguage();

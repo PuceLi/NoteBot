@@ -84,7 +84,6 @@ private:
     struct PendingSong {
         Song song;
         bool preview = false;
-        std::string warning;
     };
 
     std::optional<Song> mSong;
@@ -96,6 +95,7 @@ private:
     DisplayState mPublishedDisplay;
     bool                mIsPlaying   = false;
     bool                mPreviewMode = false;
+    bool                mAppliedTransposeOutOfRange = true;
     int                 mCurrentTick = 0;
     PlaybackClock       mPlaybackClock;
     std::chrono::steady_clock::time_point mNextReadyScanTime{};
@@ -129,6 +129,7 @@ private:
     std::string composeStatus() const;
     void stopInternal();
     void updatePreviewSounds(bool stopAll);
+    void refreshSongWarning();
     void beginTuning();
     void prepareTuneTargets();
     void tickTuning();

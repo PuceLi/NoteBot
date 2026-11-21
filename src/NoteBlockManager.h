@@ -36,7 +36,8 @@ public:
 
     void scanNearbyNoteBlocks(BlockSource& blockSource, const BlockPos& playerPos,
                               const Vec3& eyePos, int radius);
-    void mapSongToNoteBlocks(const Song& song, bool anyInstrument, const NoteMap& noteMap);
+    void mapSongToNoteBlocks(const Song& song, bool anyInstrument, const NoteMap& noteMap,
+                            bool transposeOutOfRange);
     void clear();
 
     void tick();

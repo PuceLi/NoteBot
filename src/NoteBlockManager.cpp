@@ -66,7 +66,7 @@ void NoteBlockManager::scanNearbyNoteBlocks(BlockSource& blockSource, const Bloc
 }
 
 void NoteBlockManager::mapSongToNoteBlocks(const Song& song, bool anyInstrument,
-                                           const NoteMap& noteMap) {
+                                           const NoteMap& noteMap, bool transposeOutOfRange) {
     std::lock_guard lock(mMutex);
     mNoteMapping.clear();
     mTargetPitches.clear();
@@ -78,7 +78,8 @@ void NoteBlockManager::mapSongToNoteBlocks(const Song& song, bool anyInstrument,
     for (const auto& [tick, note] : song.notesMap) {
         const int instrument = static_cast<int>(anyInstrument || note.customInstrument
             ? note.instrument : mapInstrument(note.sourceInstrumentId, note.instrument, noteMap));
-        const int pitch = note.noteLevel;
+        const int pitch = transposeOutOfRange && !note.customInstrument
+            ? transposeNoteBlockPitch(note.noteLevel) : note.noteLevel;
         const int requiredInstrument = note.customInstrument
             ? note.sourceInstrumentId
             : (anyInstrument ? -1 : instrument);
@@ -119,7 +120,11 @@ void NoteBlockManager::mapSongToNoteBlocks(const Song& song, bool anyInstrument,
 
         auto& block = mNoteBlocks[found->second];
         block.isTuned = block.pitch == pitch;
-        mNoteMapping[tick].push_back({block.pos, pitch, instrument});
+        auto& tickMappings = mNoteMapping[tick];
+        // Octave folding can make several simultaneous notes share one block.
+        if (std::none_of(tickMappings.begin(), tickMappings.end(),
+                        [&block](const auto& mapping) { return mapping.blockPos == block.pos; }))
+            tickMappings.push_back({block.pos, pitch, instrument});
         mTargetPitches.emplace(block.pos, pitch);
     }
     mMappingDiagnostics.required = required.size();

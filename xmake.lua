@@ -14,10 +14,11 @@ option_end()
 add_requires("levilamina 26.60.8", {configs = {target_type = get_config("target_type")}})
 add_requires("imgui v1.93.0", {configs = {shared = false, win32 = true, dx11 = true, dx12 = true}})
 add_requires("minhook", {configs = {shared = false}})
+add_requires("minizip-ng 4.0.10", {configs = {shared = false}})
 add_requires("levibuildscript")
 
 if is_plat("windows") then
-    add_syslinks("d3d11", "d3d12", "dxgi", "gdiplus", "shell32")
+    add_syslinks("d3d11", "d3d12", "dxgi", "gdiplus", "shell32", "ole32", "uuid")
 end
 
 if not has_config("vs_runtime") then
@@ -46,7 +47,7 @@ target("NoteBot") -- Change this to your mod name.
         )
         set_toolchains("clang-cl")
     end
-    add_packages("levilamina", "imgui", "minhook")
+    add_packages("levilamina", "imgui", "minhook", "minizip-ng")
     set_kind("shared")
     set_languages("c++20")
     set_symbols("debug")

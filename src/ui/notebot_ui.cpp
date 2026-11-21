@@ -1,5 +1,7 @@
 #include "notebot_ui.h"
+#include "top_bar.h"
 #include "translation.h"
+#include "meteor_widgets.h"
 
 #include <imgui.h>
 #include <fmt/format.h>
@@ -14,37 +16,16 @@
 namespace meteor {
 namespace {
 
-constexpr ImU32 color(int r, int g, int b, int a = 255) { return IM_COL32(r, g, b, a); }
-constexpr float kPad = 6.0f;
-constexpr float kSpacing = 3.0f;
-
 std::string utf8(const std::filesystem::path& path) {
     const auto bytes = path.u8string();
     return {reinterpret_cast<const char*>(bytes.data()), bytes.size()};
 }
 
-bool meteorButton(const char* label, float width = 0.0f) {
-    const ImVec2 text = ImGui::CalcTextSize(label);
-    if (width <= 0.0f) width = text.x + kPad * 2.0f;
-    const ImVec2 size(width, text.y + kPad * 2.0f);
-    const ImVec2 pos = ImGui::GetCursorScreenPos();
-    ImGui::InvisibleButton(label, size, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
-    const bool hovered = ImGui::IsItemHovered();
-    const bool held = ImGui::IsItemActive();
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    const ImU32 outline = held ? color(20, 20, 20) : hovered ? color(10, 10, 10) : color(0, 0, 0);
-    const ImU32 fill = held ? color(40, 40, 40, 200) : hovered ? color(30, 30, 30, 200) : color(20, 20, 20, 200);
-    draw->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), outline);
-    draw->AddRectFilled(ImVec2(pos.x + 2, pos.y + 2), ImVec2(pos.x + size.x - 2, pos.y + size.y - 2), fill);
-    draw->AddText(ImVec2(pos.x + (size.x - text.x) / 2, pos.y + kPad), color(255, 255, 255), label);
-    return ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right);
-}
-
+bool meteorButton(const char* label, float width = 0) { return widgets::button(label, width); }
 void separator(float width) {
-    const ImVec2 p = ImGui::GetCursorScreenPos();
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    draw->AddLine(ImVec2(p.x,p.y+1),ImVec2(p.x+width,p.y+1),color(255,255,255,170),1.0f);
-    ImGui::Dummy(ImVec2(width, 3));
+    const auto p = ImGui::GetCursorScreenPos();
+    widgets::line(p.x, p.y + theme::px(1), width);
+    ImGui::Dummy(ImVec2(width, theme::px(3)));
 }
 
 bool containsIgnoreCase(std::string haystack, std::string needle) {
@@ -74,30 +55,7 @@ bool containsIgnoreCase(std::string haystack, std::string needle) {
     return previous[haystack.size()] < int(haystack.size() / 2);
 }
 
-void header(const char* title, bool& expanded) {
-    const ImVec2 start = ImGui::GetCursorScreenPos();
-    const float width = ImGui::GetContentRegionAvail().x;
-    const float height = ImGui::GetFontSize() * 1.25f + 8.0f;
-    const ImVec2 end(start.x + width, start.y + height);
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    draw->AddRectFilled(start, end, color(145, 61, 226));
-    const ImVec2 text = ImGui::CalcTextSize(title);
-    draw->AddText(ImVec2(start.x + (width - text.x) * 0.5f, start.y + (height - text.y) * 0.5f), color(255, 255, 255), title);
-    const float tx = end.x - 13.0f, ty = start.y + height * 0.5f;
-    if (expanded) draw->AddTriangleFilled(ImVec2(tx - 5, ty - 2), ImVec2(tx + 5, ty - 2), ImVec2(tx, ty + 4), color(20, 20, 20, 200));
-    else draw->AddTriangleFilled(ImVec2(tx - 2, ty - 5), ImVec2(tx - 2, ty + 5), ImVec2(tx + 4, ty), color(20, 20, 20, 200));
-    ImGui::InvisibleButton("##header", ImVec2(width, height), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
-    static bool wasDragged = false;
-    if (ImGui::IsItemActivated()) wasDragged = false;
-    if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) expanded = !expanded;
-    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
-        wasDragged = true;
-        const ImVec2 p = ImGui::GetWindowPos();
-        const ImVec2 d = ImGui::GetIO().MouseDelta;
-        ImGui::SetWindowPos(ImVec2(p.x + d.x, p.y + d.y));
-    }
-    if (ImGui::IsItemDeactivated() && ImGui::IsMouseReleased(ImGuiMouseButton_Left) && !wasDragged) expanded = !expanded;
-}
+void header(const char* title, bool& expanded) { widgets::windowHeader(title, expanded); }
 
 } // namespace
 
@@ -125,6 +83,43 @@ void NotebotUi::refreshSongs() {
     });
 }
 
+void NotebotUi::setSongsDirectory(std::filesystem::path directory) {
+    songsDirectory_ = std::move(directory);
+    refreshSongs();
+}
+
+void NotebotUi::reloadLayout() {
+    moduleLayoutLoaded_ = songsLayoutLoaded_ = colorLayoutLoaded_ = false;
+    settingsWindow_.loaded = renderWindow_.loaded = false;
+}
+
+void NotebotUi::resetLayout() {
+    const auto* viewport = ImGui::GetMainViewport();
+    ImGui::ClearIniSettings();
+    const auto reset = [&](const char* name, float width, float height) {
+        const ImVec2 size(std::min(theme::px(width), viewport->Size.x - 16),
+                          std::min(theme::px(height), theme::windowHeightLimit()));
+        ImGui::SetWindowSize(name, size, ImGuiCond_Always);
+        ImGui::SetWindowPos(name, ImVec2(viewport->GetCenter().x - size.x / 2,
+                                       theme::windowCenter().y - size.y / 2), ImGuiCond_Always);
+    };
+    reset("Notebot##module", 650, 660);
+    reset("Notebot Songs##meteor", 416, 650);
+    reset("Select Color##meteor", 416, 650);
+    reset("###notebot-render", 650, 660);
+    reset("###mod-settings", 700, 620);
+    for (auto* window : ImGui::GetCurrentContext()->Windows) {
+        window->StateStorage.Clear();
+        ImGui::SetScrollY(window, 0);
+    }
+    moduleExpanded_ = songsExpanded_ = colorExpanded_ = true;
+    generalExpanded_ = true;
+    noteMapExpanded_ = false;
+    reloadLayout();
+    ImGui::MarkIniSettingsDirty();
+    if (actions.resetLayout) actions.resetLayout();
+}
+
 std::string NotebotUi::getStatus() const {
     if (!statusOverride.empty()) return statusOverride;
     if (!songLoaded) return notebot::ui::translate("notebot.status.no_song", "No song loaded.");
@@ -134,7 +129,35 @@ std::string NotebotUi::getStatus() const {
 }
 
 void NotebotUi::draw() {
+    if (resetLayoutRequested_) { resetLayoutRequested_ = false; resetLayout(); }
+    const float ratio = appearance.scale / layoutScale_;
+    if (std::abs(ratio - 1.f) > .0001f) {
+        moduleExpandedWidth_ *= ratio; moduleExpandedHeight_ *= ratio;
+        songsExpandedWidth_ *= ratio; songsExpandedHeight_ *= ratio;
+        colorExpandedWidth_ *= ratio; colorExpandedHeight_ *= ratio;
+        settingsWindow_.expandedHeight *= ratio; renderWindow_.expandedHeight *= ratio;
+        layoutScale_ = appearance.scale;
+    }
+    if (showModule || showSongs || editingColor_ >= 0) {
+        const int previousTab = selectedTopTab_;
+        ImGui::BeginDisabled(dataTransferBusy);
+        drawTopBar(selectedTopTab_);
+        ImGui::EndDisabled();
+        if (previousTab != selectedTopTab_) {
+            binding_ = BindTarget::None;
+            editingColor_ = -1;
+        }
+    }
     if (editingColor_ >= 0) { drawColorEditor(); return; }
+    if ((showModule || showSongs) && (selectedTopTab_ == 1 || selectedTopTab_ == 2)) {
+        if (!dataTransferBusy && !isBindingKey() && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            selectedTopTab_ = 0;
+            return;
+        }
+        if (selectedTopTab_ == 1) drawRender();
+        else drawModSettings();
+        return;
+    }
     if (showModule) drawModule();
     if (showSongs) drawSongs();
 }
@@ -145,15 +168,16 @@ void NotebotUi::drawSongs() {
     size_t songCount = 0;
     for (const auto& path : songFiles_)
         if (containsIgnoreCase(utf8(path.filename()), filter_)) ++songCount;
+    const float kPad = theme::px(6), kSpacing = theme::px(3);
     const float fontSize = ImGui::GetFontSize();
-    const float headerHeight = fontSize * 1.25f + 8.0f;
+    const float headerHeight = fontSize * 1.25f + theme::px(8);
     const float rowHeight = fontSize + kPad * 2 + kSpacing * 3;
     const float wantedListHeight = songCount == 0 ? fontSize * 3.0f : rowHeight * songCount;
-    const float listHeight = std::max(28.0f, std::min(wantedListHeight, std::max(100.0f, ImGui::GetMainViewport()->Size.y - 238.0f)));
-    const float windowHeight = songsExpanded_ ? headerHeight + 8 + (fontSize + kPad * 2) * 3 + kSpacing * 3 + listHeight + 11 : headerHeight;
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(416, windowHeight), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(300, headerHeight), ImVec2(FLT_MAX, FLT_MAX));
+    const float listHeight = std::max(theme::px(28), std::min(wantedListHeight, std::max(theme::px(100), ImGui::GetMainViewport()->Size.y - theme::px(238))));
+    const float windowHeight = !songsExpanded_ ? headerHeight : std::min(theme::windowHeightLimit(), headerHeight + theme::px(8) + (fontSize + kPad * 2) * 3 + kSpacing * 3 + listHeight + theme::px(11));
+    ImGui::SetNextWindowPos(theme::windowCenter(), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(theme::px(416), ImGui::GetMainViewport()->Size.x - 16), windowHeight), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(theme::px(300), ImGui::GetMainViewport()->Size.x - 16), headerHeight), ImVec2(FLT_MAX, FLT_MAX));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(kSpacing, kSpacing));
@@ -176,10 +200,10 @@ void NotebotUi::drawSongs() {
             ImGui::SetWindowSize(ImVec2(songsExpandedWidth_, songsExpandedHeight_));
         }
         if (songsExpanded_) {
-            ImGui::SetCursorPosX(8);
+            ImGui::SetCursorPosX(theme::px(8));
             ImGui::BeginGroup();
-            const float contentWidth = std::max(200.0f, ImGui::GetContentRegionAvail().x - 8.0f);
-            const float halfButtonWidth = (contentWidth - 3) / 2;
+            const float contentWidth = std::max(theme::px(200), ImGui::GetContentRegionAvail().x - theme::px(8));
+            const float halfButtonWidth = (contentWidth - theme::px(3)) / 2;
             const auto randomSong = notebot::ui::translate("notebot.ui.random_song", "Random Song");
             if (meteorButton(randomSong.c_str(), halfButtonWidth)) {
                 if (!songFiles_.empty() && actions.loadSong) {
@@ -190,7 +214,7 @@ void NotebotUi::drawSongs() {
                     showModule = true;
                 }
             }
-            ImGui::SameLine(0, 3);
+            ImGui::SameLine(0, theme::px(3));
             const auto refresh = notebot::ui::translate("notebot.ui.refresh", "Refresh");
             if (meteorButton(refresh.c_str(), halfButtonWidth)) refreshSongs();
             const auto openFolder = notebot::ui::translate("notebot.ui.open_song_folder", "Open Song Folder");
@@ -203,10 +227,7 @@ void NotebotUi::drawSongs() {
                     ShellExecuteW(nullptr, L"open", songsDirectory_.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
                 }
             }
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(20/255.f, 20/255.f, 20/255.f, 160/255.f));
-            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 1));
-            ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4(1, 1, 1, 20/255.f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 2);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, theme::px(2));
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kPad, kPad));
             ImGui::SetNextItemWidth(contentWidth);
             if (focusSearch_) { ImGui::SetKeyboardFocusHere(); focusSearch_ = false; }
@@ -214,7 +235,6 @@ void NotebotUi::drawSongs() {
             if (ImGui::InputTextWithHint("##song-search", searchHint.c_str(), searchBuffer_, sizeof(searchBuffer_))) filter_ = searchBuffer_;
             if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { searchBuffer_[0] = '\0'; filter_.clear(); }
             ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor(3);
 
             std::vector<std::filesystem::path> visibleSongs;
             const bool exists = songFolderAvailable_;
@@ -225,7 +245,7 @@ void NotebotUi::drawSongs() {
                     visibleSongs.push_back(path);
                 }
             }
-            const float listHeight = std::max(28.0f, ImGui::GetContentRegionAvail().y - 8.0f);
+            const float listHeight = std::max(theme::px(28), ImGui::GetContentRegionAvail().y - theme::px(8));
             ImGui::BeginChild("##songs", ImVec2(contentWidth, listHeight), false,
                               ImGuiWindowFlags_NoScrollbar);
             const auto load = notebot::ui::translate("notebot.ui.load", "Load");
@@ -236,9 +256,9 @@ void NotebotUi::drawSongs() {
                     ImGui::PushID(filename.c_str());
                     const std::string name = utf8(path.stem());
                     ImGui::TextUnformatted(name.c_str());
-                    const float loadWidth = ImGui::CalcTextSize(load.c_str()).x + 12;
-                    const float previewWidth = ImGui::CalcTextSize(preview.c_str()).x + 12;
-                    ImGui::SameLine(contentWidth - loadWidth - previewWidth - 3);
+                    const float loadWidth = ImGui::CalcTextSize(load.c_str()).x + theme::px(12);
+                    const float previewWidth = ImGui::CalcTextSize(preview.c_str()).x + theme::px(12);
+                    ImGui::SameLine(contentWidth - loadWidth - previewWidth - theme::px(3));
                     if (meteorButton(preview.c_str()) && actions.previewSong) {
                         actions.previewSong(path);
                         showSongs = false;
@@ -264,7 +284,7 @@ void NotebotUi::drawSongs() {
             }
             ImGui::EndChild();
             ImGui::EndGroup();
-            ImGui::Dummy(ImVec2(0, 8));
+            ImGui::Dummy(ImVec2(0, theme::px(8)));
         }
     }
     ImGui::End();

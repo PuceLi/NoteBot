@@ -118,16 +118,23 @@ bool NoteBotPlayer::queueSong(const std::filesystem::path& filePath, bool previe
         return false;
     }
 
-    std::string warning;
+    mPendingSongError.reset();
+    mPendingSong = PendingSong{std::move(*result.song), preview};
+    return true;
+}
+
+void NoteBotPlayer::refreshSongWarning() {
+    mSongWarning.clear();
+    if (!mSong) return;
     size_t unsupportedPitchCount = 0;
     size_t unsupportedInstrumentCount = 0;
     int firstPitchTick = -1;
     int firstPitch = 0;
     int firstCustomInstrumentTick = -1;
     int firstCustomInstrument = -1;
-    for (const auto& [tick, note] : result.song->notesMap) {
+    for (const auto& [tick, note] : mSong->notesMap) {
         const int pitch = note.noteLevel;
-        if (!preview && (pitch < 0 || pitch > 24)) {
+        if (!mPreviewMode && !mConfig.transposeOutOfRange && (pitch < 0 || pitch > 24)) {
             if (unsupportedPitchCount == 0) {
                 firstPitchTick = tick;
                 firstPitch = pitch;
@@ -143,20 +150,16 @@ bool NoteBotPlayer::queueSong(const std::filesystem::path& filePath, bool previe
         }
     }
     if (unsupportedPitchCount > 0) {
-        warning = ui::format("notebot.warning.out_of_range",
+        mSongWarning = ui::format("notebot.warning.out_of_range",
             "{0} note(s) are outside the in-game note-block pitch range 0-24; first at tick {1} has pitch {2}",
             unsupportedPitchCount, firstPitchTick, firstPitch);
     }
     if (unsupportedInstrumentCount > 0) {
-        if (!warning.empty()) warning += "; ";
-        warning += ui::format("notebot.warning.custom_instruments",
+        if (!mSongWarning.empty()) mSongWarning += "; ";
+        mSongWarning += ui::format("notebot.warning.custom_instruments",
             "{0} note(s) use NBS custom instrument ID {1}; its custom sound is not loaded by NoteBot (first at tick {2})",
             unsupportedInstrumentCount, firstCustomInstrument, firstCustomInstrumentTick);
     }
-
-    mPendingSongError.reset();
-    mPendingSong = PendingSong{std::move(*result.song), preview, std::move(warning)};
-    return true;
 }
 
 void NoteBotPlayer::play() {
@@ -187,10 +190,10 @@ void NoteBotPlayer::stopInternal() {
     mStage = Stage::Ready;
     mTuneTargets.clear();
     mError.clear();
-    mSongWarning.clear();
     mWorldPaused.store(false, std::memory_order_release);
     mHasSimulationTick = false;
     mHasWorldPlaybackTick = false;
+    refreshSongWarning();
 }
 
 void NoteBotPlayer::updatePreviewSounds(bool stopAll) {
@@ -473,7 +476,8 @@ void NoteBotPlayer::tickInternal() {
         reset();
         mSong = std::move(nextSong->song);
         mPreviewMode = nextSong->preview;
-        mSongWarning = std::move(nextSong->warning);
+        mAppliedTransposeOutOfRange = mConfig.transposeOutOfRange;
+        refreshSongWarning();
         mNextReadyScanTime = {};
         mAutoRefreshNearby = !mPreviewMode;
         if (mPreviewMode) {
@@ -485,6 +489,22 @@ void NoteBotPlayer::tickInternal() {
                 mIsPlaying = true;
             }
         }
+    }
+
+    if (mSong && mAppliedTransposeOutOfRange != mConfig.transposeOutOfRange) {
+        mAppliedTransposeOutOfRange = mConfig.transposeOutOfRange;
+        if (!mPreviewMode) {
+            // A different pitch set needs a new mapping and tuning pass.
+            const bool restart = mIsPlaying || mStage == Stage::Tuning || mStage == Stage::Verifying;
+            stopInternal();
+            mAutoRefreshNearby = true;
+            mNextReadyScanTime = {};
+            mNoteBlockManager.mapSongToNoteBlocks(*mSong,
+                mConfig.mode == NoteBotConfig::NotebotMode::Auto, mConfig.noteMap,
+                mConfig.transposeOutOfRange);
+            if (restart) beginTuning();
+        }
+        refreshSongWarning();
     }
 
     const bool worldExited = mWorldExitRequested.exchange(false, std::memory_order_acq_rel);
@@ -562,7 +582,8 @@ void NoteBotPlayer::tickInternal() {
             mNoteBlockManager.scanNearbyNoteBlocks(blockSource, BlockPos(player->getPosition()),
                                                     player->getEyePos(), mConfig.general.scanRadius);
             mNoteBlockManager.mapSongToNoteBlocks(*mSong,
-                mConfig.mode == NoteBotConfig::NotebotMode::Auto, mConfig.noteMap);
+                mConfig.mode == NoteBotConfig::NotebotMode::Auto, mConfig.noteMap,
+                mConfig.transposeOutOfRange);
         }
     }
 
@@ -740,6 +761,7 @@ void NoteBotPlayer::scanAndMapNoteBlocks(BlockSource& blockSource, const BlockPo
                                         const Vec3& eyePos, int radius) {
     mIsPlaying = false;
     mPreviewMode = false;
+    refreshSongWarning();
     mCurrentTick = 0;
     mPlaybackClock.reset();
     mNextReadyScanTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
@@ -750,7 +772,8 @@ void NoteBotPlayer::scanAndMapNoteBlocks(BlockSource& blockSource, const BlockPo
     mNoteBlockManager.scanNearbyNoteBlocks(blockSource, playerPos, eyePos, radius);
     if (mSong) {
         mNoteBlockManager.mapSongToNoteBlocks(*mSong,
-            mConfig.mode == NoteBotConfig::NotebotMode::Auto, mConfig.noteMap);
+            mConfig.mode == NoteBotConfig::NotebotMode::Auto, mConfig.noteMap,
+            mConfig.transposeOutOfRange);
     }
 }
 

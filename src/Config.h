@@ -1,6 +1,7 @@
 #pragma once
 
 #include "NoteData.h"
+#include "UiAppearance.h"
 #include <array>
 #include <filesystem>
 #include <string>
@@ -32,7 +33,7 @@ struct KeybindsConfig {
 };
 
 struct NoteBotConfig {
-    int version = 14;
+    int version = 17;
 
     enum class NotebotMode {
         Manual = 0,
@@ -45,6 +46,7 @@ struct NoteBotConfig {
     };
 
     GeneralConfig general;
+    UiAppearance ui;
     NotebotMode mode = NotebotMode::Manual;
     PlayingMode playingMode = PlayingMode::Polyphonic;
     NoteMap noteMap = makeDefaultNoteMap();
@@ -74,6 +76,7 @@ struct NoteBotConfig {
     bool debugBlockEvents = false;
 
     ColorConfig colors;
+    std::array<bool, 12> renderRainbowColors{};
     std::array<float, 4> pitchTextColor = {0.0f, 0.8f, 0.0f, 1.0f};
     std::array<float, 4> remainingTextColor = {0.8f, 0.0f, 0.0f, 1.0f};
     KeybindsConfig keybinds;
@@ -86,5 +89,6 @@ std::filesystem::path getSongDir();
 bool sanitizeConfig(NoteBotConfig& config);
 void loadConfig();
 void saveConfig();
+NoteBotConfig readConfigForImport(const std::filesystem::path& path);
 
 } // namespace notebot

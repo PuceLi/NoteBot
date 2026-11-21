@@ -57,6 +57,13 @@ inline Instrument mapInstrument(uint8_t sourceInstrumentId, Instrument source, c
     return static_cast<Instrument>(mappedInstrument);
 }
 
+// Note blocks cover two octaves (0-24). Move only out-of-range notes by whole octaves, preserving their pitch class and the original in-range notes
+inline constexpr int transposeNoteBlockPitch(int pitch) {
+    while (pitch < 0) pitch += 12;
+    while (pitch > 24) pitch -= 12;
+    return pitch;
+}
+
 struct Note {
     Instrument instrument;
     int8_t     noteLevel;

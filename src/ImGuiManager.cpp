@@ -1,6 +1,8 @@
 #include "ImGuiManager.h"
 #include "Main.h"
 #include "NoteBotUI.h"
+#include "Config.h"
+#include "ui/theme.h"
 
 #define D3D12_FEATURE_DATA_D3D12_OPTIONS  D3D12_FEATURE_DATA_D3D12_OPTIONS_LEGACY
 #define D3D12_FEATURE_DATA_ARCHITECTURE  D3D12_FEATURE_DATA_ARCHITECTURE_LEGACY
@@ -243,6 +245,8 @@ void RenderImGui(IDXGISwapChain* pSwapChain) {
         g_pd3dDeviceContext->OMSetRenderTargets(1, &rtv, nullptr);
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
+        if (gUI) gUI->prepareFrame();
+        meteor::theme::apply(getConfig().ui);
         ImGui::NewFrame();
 
         // 渲染 NoteBot UI

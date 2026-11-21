@@ -1,5 +1,6 @@
 #include "notebot_ui.h"
 #include "translation.h"
+#include "meteor_widgets.h"
 #include "mc/deps/shared_types/v1_26_20/block/NoteBlockInstrumentEnum.h"
 
 #include <imgui.h>
@@ -18,7 +19,6 @@ namespace meteor {
 namespace {
 
 constexpr ImU32 col(int r, int g, int b, int a = 255) { return IM_COL32(r, g, b, a); }
-constexpr float pad = 6.0f;
 constexpr float rowHeight = 33.0f;
 constexpr float rowControlX = 330.0f;
 constexpr float resetButtonWidth = 30.0f;
@@ -35,106 +35,27 @@ std::string instrumentLabel(notebot::Instrument instrument) {
     return label;
 }
 
-std::string keybindLabel(std::string_view keybind) {
-    static constexpr std::array<std::pair<std::string_view, std::string_view>, 8> keyNames{{
-        {"None", "notebot.ui.key_unbound"},
-        {"Space", "notebot.ui.key_space"},
-        {"Tab", "notebot.ui.key_tab"},
-        {"Enter", "notebot.ui.key_enter"},
-        {"Insert", "notebot.ui.key_insert"},
-        {"Delete", "notebot.ui.key_delete"},
-        {"Home", "notebot.ui.key_home"},
-        {"End", "notebot.ui.key_end"}
-    }};
-    for (const auto& [name, key] : keyNames)
-        if (keybind == name) return translate(key, name);
-    return std::string(keybind);
-}
 
-void box(ImDrawList* draw, ImVec2 p, ImVec2 size, bool hovered, bool held) {
-    draw->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y),
-        held ? col(20,20,20) : hovered ? col(10,10,10) : col(0,0,0));
-    draw->AddRectFilled(ImVec2(p.x + 2, p.y + 2), ImVec2(p.x + size.x - 2, p.y + size.y - 2),
-        held ? col(40,40,40,190) : hovered ? col(30,30,30,175) : col(20,20,20,160));
-}
-
-bool button(const char* text, float width) {
-    const ImVec2 t = ImGui::CalcTextSize(text);
-    if (width <= 0) width = t.x + pad * 2;
-    const ImVec2 size(width, t.y + pad * 2);
-    const ImVec2 p = ImGui::GetCursorScreenPos();
-    ImGui::InvisibleButton(text, size, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
-    box(ImGui::GetWindowDrawList(), p, size, ImGui::IsItemHovered(), ImGui::IsItemActive());
-    ImGui::GetWindowDrawList()->AddText(ImVec2(p.x + (size.x - t.x)/2, p.y + pad), col(255,255,255), text);
-    return ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right);
-}
+bool button(const char* text, float width) { return widgets::button(text, width); }
 
 bool iconButton(const char* id, const char* tooltip, int kind) {
-    const ImVec2 size(30,30), p = ImGui::GetCursorScreenPos();
-    ImGui::InvisibleButton(id, size, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
-    const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right);
-    const bool hovered = ImGui::IsItemHovered();
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    box(draw, p, size, hovered, ImGui::IsItemActive());
-    const ImU32 ink = col(255,255,255);
-    if (kind>=0 && kind<int(iconTextures.size()) && iconTextures[size_t(kind)]!=0) {
-        draw->AddImage(static_cast<ImTextureID>(iconTextures[size_t(kind)]),
-            ImVec2(p.x+6,p.y+6),ImVec2(p.x+24,p.y+24));
-    } else if (kind == 0) {
-        std::array<ImVec2, 19> points{};
-        for (int i = 0; i < 19; ++i) {
-            const float angle = (-2.4f + float(i) * 0.27f);
-            points[size_t(i)] = ImVec2(p.x + 15 + std::cos(angle)*8, p.y + 15 + std::sin(angle)*8);
-        }
-        draw->AddPolyline(points.data(), int(points.size()), ink, false, 2.5f);
-        draw->AddTriangleFilled(ImVec2(p.x+22,p.y+7), ImVec2(p.x+26,p.y+12), ImVec2(p.x+19,p.y+12), ink);
-    } else if (kind == 1) {
-        draw->AddRect(ImVec2(p.x+8,p.y+10), ImVec2(p.x+19,p.y+22), ink, 0.0f, ImDrawFlags_None, 2.0f);
-        draw->AddRect(ImVec2(p.x+12,p.y+7), ImVec2(p.x+23,p.y+19), ink, 0.0f, ImDrawFlags_None, 2.0f);
-    } else {
-        draw->AddRect(ImVec2(p.x+8,p.y+9), ImVec2(p.x+22,p.y+24), ink, 0.0f, ImDrawFlags_None, 2.0f);
-        draw->AddRectFilled(ImVec2(p.x+12,p.y+6), ImVec2(p.x+18,p.y+11), ink);
-        draw->AddLine(ImVec2(p.x+11,p.y+15), ImVec2(p.x+19,p.y+15), ink);
-        draw->AddLine(ImVec2(p.x+11,p.y+19), ImVec2(p.x+19,p.y+19), ink);
-    }
-    if (hovered && tooltip) ImGui::SetTooltip("%s", tooltip);
-    return clicked;
+    return widgets::iconButton(id, kind >= 0 && kind < int(iconTextures.size()) ? iconTextures[size_t(kind)] : 0, kind, tooltip);
 }
 
 bool checkBox(const char* id, bool& value) {
-    const ImVec2 size(30,30), p = ImGui::GetCursorScreenPos();
-    ImGui::InvisibleButton(id, size, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
-    const bool changed = ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right);
-    if (changed) value = !value;
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    box(draw, p, size, ImGui::IsItemHovered(), ImGui::IsItemActive());
-    if (value) draw->AddRectFilled(ImVec2(p.x+7,p.y+7), ImVec2(p.x+23,p.y+23), col(145,61,226));
-    return changed;
+    const bool before = value;
+    widgets::checkbox(id, value);
+    return value != before;
 }
 
 void horizontalSeparator(float width) {
-    const ImVec2 p = ImGui::GetCursorScreenPos();
-    ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x,p.y+1),ImVec2(p.x+width,p.y+1),col(255,255,255,170),1.0f);
-    ImGui::Dummy(ImVec2(width,3));
+    const auto p = ImGui::GetCursorScreenPos();
+    widgets::line(p.x, p.y + theme::px(1), width);
+    ImGui::Dummy(ImVec2(width, theme::px(3)));
 }
 
 bool section(const char* name, bool& expanded, float width) {
-    ImGui::PushID(name);
-    const ImVec2 p = ImGui::GetCursorScreenPos();
-    const float h = ImGui::GetFontSize() + 6;
-    ImGui::InvisibleButton("##section", ImVec2(width,h), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
-    if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right)) expanded = !expanded;
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    const ImVec2 text = ImGui::CalcTextSize(name);
-    const float textX = p.x + (width-text.x)/2;
-    const float centerY = p.y+h/2;
-    draw->AddLine(ImVec2(p.x,centerY),ImVec2(textX-4,centerY),col(255,255,255,170),1.0f);
-    draw->AddLine(ImVec2(textX+text.x+4,centerY),ImVec2(p.x+width-22,centerY),col(255,255,255,170),1.0f);
-    draw->AddText(ImVec2(textX,p.y+3),col(255,255,255),name);
-    if (expanded) draw->AddTriangleFilled(ImVec2(p.x+width-16,centerY-3),ImVec2(p.x+width-4,centerY-3),ImVec2(p.x+width-10,centerY+4),col(255,255,255));
-    else draw->AddTriangleFilled(ImVec2(p.x+width-14,centerY-6),ImVec2(p.x+width-14,centerY+6),ImVec2(p.x+width-6,centerY),col(255,255,255));
-    ImGui::PopID();
-    return expanded;
+    return widgets::section(name, name, &expanded, width);
 }
 
 struct Row {
@@ -146,28 +67,25 @@ struct Row {
 Row beginRow(const char* label, const char* description, float width) {
     const ImVec2 cursor = ImGui::GetCursorPos();
     const ImVec2 p = ImGui::GetCursorScreenPos();
-    ImGui::GetWindowDrawList()->AddText(ImVec2(p.x,p.y+6),col(255,255,255),label);
-    if (description && ImGui::IsMouseHoveringRect(ImVec2(p.x,p.y),ImVec2(p.x+ImGui::CalcTextSize(label).x,p.y+30)))
-        ImGui::SetTooltip("%s",description);
     ImGui::PushID(label);
-    const float controlX = std::min(rowControlX,
-        std::max(190.0f, (width-resetButtonWidth-rowControlGap)*0.55f));
+    const float controlX = std::min(theme::px(rowControlX), std::max(0.f, (width-theme::px(resetButtonWidth)-theme::px(rowControlGap))*0.55f));
+    widgets::rowLabel(label, p, controlX - theme::px(rowControlGap), description);
     ImGui::SetCursorPos(ImVec2(cursor.x+controlX,cursor.y));
     return {cursor,width,controlX};
 }
 
 float rowControlWidth(const Row& row) {
-    return std::max(1.0f,row.width-row.controlX-resetButtonWidth-rowControlGap);
+    return std::max(1.0f,row.width-row.controlX-theme::px(resetButtonWidth)-theme::px(rowControlGap));
 }
 
 void finishRow(const Row& row) {
     ImGui::PopID();
     const float usedHeight = ImGui::GetCursorPosY()-row.origin.y;
-    ImGui::Dummy(ImVec2(0.0f,std::max(0.0f,rowHeight-usedHeight)));
+    ImGui::Dummy(ImVec2(0.0f,std::max(0.0f,theme::px(rowHeight)-usedHeight)));
 }
 
 bool resetAt(const Row& row) {
-    ImGui::SetCursorPos(ImVec2(row.origin.x+row.width-resetButtonWidth,row.origin.y));
+    ImGui::SetCursorPos(ImVec2(row.origin.x+row.width-theme::px(resetButtonWidth),row.origin.y));
     const auto tooltip = translate("notebot.ui.reset", "Reset");
     return iconButton("##reset",tooltip.c_str(),0);
 }
@@ -179,57 +97,46 @@ bool boolRow(const char* label, const char* description, bool& value, bool defau
     finishRow(row); return changed;
 }
 
-bool slider(const char* id, int& value, int minValue, int maxValue, float width=200.0f) {
-    const ImVec2 p=ImGui::GetCursorScreenPos(), size(width,30);
+bool slider(const char* id, int& value, int minValue, int maxValue, float width=theme::px(200)) {
+    const ImVec2 p=ImGui::GetCursorScreenPos(), size(width,theme::px(30));
     ImGui::InvisibleButton(id,size);
     const bool hovered=ImGui::IsItemHovered(), held=ImGui::IsItemActive();
     bool changed=false;
     if (held && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-        const float fraction=std::clamp((ImGui::GetIO().MousePos.x-p.x-9)/(size.x-18),0.0f,1.0f);
+        const float fraction=std::clamp((ImGui::GetIO().MousePos.x-p.x-theme::px(9))/(size.x-theme::px(18)),0.0f,1.0f);
         const int next=minValue+int(std::round(fraction*(maxValue-minValue)));
         changed=next!=value; value=next;
     }
     const float fraction=std::clamp(float(value-minValue)/std::max(1,maxValue-minValue),0.0f,1.0f);
-    const float handleX=p.x+9+fraction*(size.x-18);
+    const float handleX=p.x+theme::px(9)+fraction*(size.x-theme::px(18));
     ImDrawList* draw=ImGui::GetWindowDrawList();
-    draw->AddRectFilled(ImVec2(p.x+9,p.y+13),ImVec2(handleX,p.y+16),col(100,35,170));
-    draw->AddRectFilled(ImVec2(handleX,p.y+13),ImVec2(p.x+size.x-9,p.y+16),col(50,50,50));
-    draw->AddCircleFilled(ImVec2(handleX,p.y+15),9,held?col(150,60,255):hovered?col(140,30,255):col(130,0,255));
+    draw->AddRectFilled(ImVec2(p.x+theme::px(9),p.y+theme::px(13)),ImVec2(handleX,p.y+theme::px(16)),theme::color(theme::UiColor::SliderLeft));
+    draw->AddRectFilled(ImVec2(handleX,p.y+theme::px(13)),ImVec2(p.x+size.x-theme::px(9),p.y+theme::px(16)),theme::color(theme::UiColor::SliderRight));
+    draw->AddCircleFilled(ImVec2(handleX,p.y+theme::px(15)),theme::px(9),theme::color(held ? theme::UiColor::SliderHandlePressed : hovered ? theme::UiColor::SliderHandleHovered : theme::UiColor::SliderHandle));
     return changed;
 }
 
 bool intRow(const char* label, const char* description, int& value, int def, int minValue, int maxValue, float width) {
     Row row=beginRow(label,description,width);
-    ImGui::SetNextItemWidth(75);
+    ImGui::SetNextItemWidth(theme::px(75));
     bool changed=ImGui::InputInt("##text",&value,0,0);
     value=std::max(value,minValue);
-    ImGui::SameLine(0,3);
-    changed |= slider("##slider",value,minValue,maxValue,rowControlWidth(row)-75.0f-3.0f);
+    ImGui::SameLine(0,theme::px(3));
+    changed |= slider("##slider",value,minValue,maxValue,rowControlWidth(row)-theme::px(78));
     if (resetAt(row)) { value=def; changed=true; }
     finishRow(row); return changed;
 }
 
 bool floatRow(const char* label, const char* description, float& value, float def, float minValue, float maxValue, float width) {
-    Row row=beginRow(label,description,width);
-    ImGui::SetNextItemWidth(75);
-    bool changed=ImGui::InputFloat("##text",&value,0,0,"%.2f");
-    value=std::max(value,minValue);
-    ImGui::SameLine(0,3);
-    const float sliderWidth=rowControlWidth(row)-75.0f-3.0f;
-    const float trackWidth=sliderWidth-18.0f;
-    const ImVec2 p=ImGui::GetCursorScreenPos();
-    ImGui::InvisibleButton("##slider",ImVec2(sliderWidth,30));
-    if (ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-        const float next=std::clamp((ImGui::GetIO().MousePos.x-p.x-9)/trackWidth,0.0f,1.0f)*(maxValue-minValue)+minValue;
-        changed |= std::abs(next-value)>0.001f; value=next;
-    }
-    const float frac=std::clamp((value-minValue)/std::max(0.001f,maxValue-minValue),0.0f,1.0f);
-    const float hx=p.x+9+frac*trackWidth;
-    ImDrawList* draw=ImGui::GetWindowDrawList();
-    draw->AddRectFilled(ImVec2(p.x+9,p.y+13),ImVec2(hx,p.y+16),col(100,35,170));
-    draw->AddRectFilled(ImVec2(hx,p.y+13),ImVec2(p.x+sliderWidth-9,p.y+16),col(50,50,50));
-    draw->AddCircleFilled(ImVec2(hx,p.y+15),9,col(130,0,255));
-    if (resetAt(row)) { value=def; changed=true; }
+    Row row = beginRow(label, description, width);
+    ImGui::SetNextItemWidth(theme::px(75));
+    bool changed = ImGui::InputFloat("##text", &value, 0, 0, "%.2f");
+    value = std::max(value, minValue);
+    ImGui::SameLine(0, theme::px(3));
+    const float before = value;
+    widgets::slider("##slider", value, minValue, maxValue, std::max(theme::px(20), rowControlWidth(row) - theme::px(78)));
+    changed |= before != value;
+    if (resetAt(row)) { value = def; changed = true; }
     finishRow(row); return changed;
 }
 
@@ -245,35 +152,19 @@ bool colorRow(const char* label, const char* description, std::array<float,4>& v
               const std::array<float,4>& def, bool& rainbowEnabled, float width, bool& openEditor) {
     Row row=beginRow(label,description,width);
     const ImVec2 p=ImGui::GetCursorScreenPos();
-    ImGui::InvisibleButton("##swatch",ImVec2(32,32));
-    ImGui::GetWindowDrawList()->AddRectFilled(p,ImVec2(p.x+32,p.y+32),
+    ImGui::InvisibleButton("##swatch",ImVec2(theme::px(32),theme::px(32)));
+    ImGui::GetWindowDrawList()->AddRectFilled(p,ImVec2(p.x+theme::px(32),p.y+theme::px(32)),
         ImGui::ColorConvertFloat4ToU32(ImVec4(value[0],value[1],value[2],value[3])));
     if (ImGui::IsItemClicked()) openEditor=true;
-    ImGui::SameLine(0,3);
+    ImGui::SameLine(0,theme::px(3));
     const auto editLabel = translate("notebot.ui.edit", "Edit");
-    if (button(editLabel.c_str(),46)) openEditor=true;
+    if (button(editLabel.c_str(),theme::px(46))) openEditor=true;
     bool changed=false;
     if (resetAt(row)) { value=def; rainbowEnabled=false; changed=true; }
     finishRow(row); return changed;
 }
 
-void moduleHeader(bool& expanded, float width) {
-    const ImVec2 p=ImGui::GetCursorScreenPos();
-    const float h=ImGui::GetFontSize()*1.25f+8;
-    ImGui::InvisibleButton("##module-header",ImVec2(width,h),ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonRight);
-    ImDrawList* draw=ImGui::GetWindowDrawList();
-    draw->AddRectFilled(p,ImVec2(p.x+width,p.y+h),col(145,61,226));
-    const ImVec2 t=ImGui::CalcTextSize("Notebot");
-    draw->AddText(ImVec2(p.x+(width-t.x)/2,p.y+(h-t.y)/2),col(255,255,255),"Notebot");
-    const float tx=p.x+width-15,ty=p.y+h/2;
-    if (expanded) draw->AddTriangleFilled(ImVec2(tx-5,ty-2),ImVec2(tx+5,ty-2),ImVec2(tx,ty+4),col(20,20,20,200));
-    else draw->AddTriangleFilled(ImVec2(tx-2,ty-5),ImVec2(tx-2,ty+5),ImVec2(tx+4,ty),col(20,20,20,200));
-    if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right)) expanded=!expanded;
-    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left,2)) {
-        const ImVec2 pos=ImGui::GetWindowPos(), delta=ImGui::GetIO().MouseDelta;
-        ImGui::SetWindowPos(ImVec2(pos.x+delta.x,pos.y+delta.y));
-    }
-}
+void moduleHeader(bool& expanded, float) { widgets::windowHeader("Notebot", expanded); }
 
 } // namespace
 
@@ -301,36 +192,19 @@ void NotebotUi::updateRainbowColors() {
 
 void NotebotUi::drawModule() {
     iconTextures={resetIcon,copyIcon,pasteIcon};
-    if (isBindingKey()) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) binding_=BindTarget::None;
-        else for (int key=ImGuiKey_NamedKey_BEGIN;key<ImGuiKey_NamedKey_END;++key) {
-            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false)) {
-                auto& value = binding_ == BindTarget::Playback ? playbackKeybind : keybind;
-                auto& callback = binding_ == BindTarget::Playback ? actions.playbackBindChanged : actions.bindChanged;
-                value=ImGui::GetKeyName(static_cast<ImGuiKey>(key));
-                binding_=BindTarget::None;
-                if (callback) callback(value);
-                break;
-            }
-        }
-    } else if (ImGui::IsKeyPressed(ImGuiKey_Escape)) { showModule=false; return; }
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) { showModule=false; return; }
 
     const ImGuiViewport* viewport=ImGui::GetMainViewport();
-    const float height=std::min(660.0f,std::max(200.0f,viewport->Size.y-128.0f));
-    const float headerHeight=ImGui::GetFontSize()*1.25f+8;
-    ImGui::SetNextWindowPos(viewport->GetCenter(),ImGuiCond_FirstUseEver,ImVec2(0.5f,0.5f));
-    ImGui::SetNextWindowSize(ImVec2(650,height),ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(420,headerHeight),ImVec2(FLT_MAX,FLT_MAX));
+    const float height=std::min(theme::px(660),theme::windowHeightLimit());
+    const float headerHeight=ImGui::GetFontSize()*1.25f+theme::px(8);
+    ImGui::SetNextWindowPos(theme::windowCenter(),ImGuiCond_FirstUseEver,ImVec2(0.5f,0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(theme::px(650), viewport->Size.x-16),height),ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(theme::px(420), viewport->Size.x-16),headerHeight),ImVec2(FLT_MAX,FLT_MAX));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(0,0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(3,3));
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(6,6));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,2);
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,ImVec4(20/255.f,20/255.f,20/255.f,160/255.f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,ImVec4(30/255.f,30/255.f,30/255.f,175/255.f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,ImVec4(40/255.f,40/255.f,40/255.f,190/255.f));
-    ImGui::PushStyleColor(ImGuiCol_Border,ImVec4(0,0,0,1));
-    ImGui::PushStyleColor(ImGuiCol_PopupBg,ImVec4(20/255.f,20/255.f,20/255.f,0.76f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(theme::px(3),theme::px(3)));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(theme::px(6),theme::px(6)));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,theme::px(2));
     if (ImGui::Begin("Notebot##module",&showModule,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoScrollbar)) {
         if (!moduleLayoutLoaded_) {
             moduleExpanded_ = ImGui::GetWindowSize().y > headerHeight + 10.0f;
@@ -348,7 +222,7 @@ void NotebotUi::drawModule() {
             ImGui::SetWindowSize(ImVec2(moduleExpandedWidth_,moduleExpandedHeight_));
         if (moduleExpanded_) {
             ImGui::BeginChild("##config-view",ImVec2(0,ImGui::GetContentRegionAvail().y),false,ImGuiWindowFlags_NoScrollbar);
-            constexpr float contentPadding=8.0f;
+            const float contentPadding=theme::px(8);
             ImGui::SetCursorPosX(contentPadding);
             ImGui::BeginGroup();
             const float width=std::max(1.0f,ImGui::GetContentRegionAvail().x-contentPadding);
@@ -398,8 +272,8 @@ void NotebotUi::drawModule() {
                 const auto autoPlay = translate("notebot.ui.auto_play", "Auto Play");
                 const auto autoPlayTip = translate("notebot.ui.auto_play_tip", "Auto plays random songs");
                 changed |= boolRow(autoPlay.c_str(),autoPlayTip.c_str(),settings.autoPlay,defaults.autoPlay,width);
-                const auto transpose = translate("notebot.ui.transpose", "Transpose Out Of Range");
-                const auto transposeTip = translate("notebot.ui.transpose_tip", "Transposes out of range notes");
+                const auto transpose = translate("notebot.ui.transpose", "Octave Conversion");
+                const auto transposeTip = translate("notebot.ui.transpose_tip", "Move only out-of-range notes by whole octaves into the playable range. Preview keeps the original pitches. Changing this setting remaps blocks and restarts playback.");
                 changed |= boolRow(transpose.c_str(),transposeTip.c_str(),settings.transposeOutOfRange,defaults.transposeOutOfRange,width);
                 const auto swingArm = translate("notebot.ui.swing_arm", "Swing Arm");
                 const auto swingArmTip = translate("notebot.ui.swing_arm_tip", "Should swing arm on hit");
@@ -431,71 +305,6 @@ void NotebotUi::drawModule() {
                         static_cast<int>(choices.size()),width);
                 }
             }
-            const auto renderSection = translate("notebot.ui.render", "Render");
-            if (section(renderSection.c_str(),renderExpanded_,width)) {
-                const auto hideNowPlaying = translate("notebot.ui.hide_now_playing", "Hide Now Playing");
-                const auto showNowPlayingLabel = translate("notebot.ui.show_now_playing", "Show Now Playing");
-                if (button(showNowPlaying ? hideNowPlaying.c_str() : showNowPlayingLabel.c_str(), width)) {
-                    showNowPlaying = !showNowPlaying;
-                    if (actions.nowPlayingVisibilityChanged)
-                        actions.nowPlayingVisibilityChanged(showNowPlaying);
-                }
-                const auto resetNowPlaying = translate("notebot.ui.reset_now_playing", "Reset Now Playing Position");
-                if (button(resetNowPlaying.c_str(), width) && actions.resetNowPlayingPosition)
-                    actions.resetNowPlayingPosition();
-                const auto renderText = translate("notebot.ui.render_text", "Render Text");
-                const auto renderTextTip = translate("notebot.ui.render_text_tip",
-                    "Whether to render text above noteblocks");
-                changed |= boolRow(renderText.c_str(),renderTextTip.c_str(),settings.renderText,defaults.renderText,width);
-                const auto renderBoxes = translate("notebot.ui.render_boxes", "Render Boxes");
-                const auto renderBoxesTip = translate("notebot.ui.render_boxes_tip",
-                    "Whether to render noteblock outlines");
-                changed |= boolRow(renderBoxes.c_str(),renderBoxesTip.c_str(),settings.renderBoxes,defaults.renderBoxes,width);
-                const auto throughWalls = translate("notebot.ui.render_through_walls", "Render Through Walls");
-                const auto throughWallsTip = translate("notebot.ui.render_through_walls_tip",
-                    "Show note-block outlines and filled faces through walls");
-                changed |= boolRow(throughWalls.c_str(),throughWallsTip.c_str(),settings.renderBoxThroughWalls,defaults.renderBoxThroughWalls,width);
-                const auto hitFade = translate("notebot.ui.hit_fade", "Hit Fade Time (seconds)");
-                const auto hitFadeTip = translate("notebot.ui.hit_fade_tip",
-                    "Time for playback highlights to fade back to the normal block color");
-                changed |= floatRow(hitFade.c_str(),hitFadeTip.c_str(),settings.hitFadeSeconds,defaults.hitFadeSeconds,0.0f,5.0f,width);
-                const auto lines = translate("notebot.ui.lines", "Lines");
-                const auto sides = translate("notebot.ui.sides", "Sides");
-                const auto both = translate("notebot.ui.both", "Both");
-                const char* shapes[]={lines.c_str(),sides.c_str(),both.c_str()};
-                const auto shapeMode = translate("notebot.ui.shape_mode", "Shape Mode");
-                changed |= enumRow(shapeMode.c_str(),nullptr,settings.shapeMode,defaults.shapeMode,shapes,3,width);
-                static constexpr const char* colorKeys[]={
-                    "untuned_side_color","untuned_line_color","tuned_side_color","tuned_line_color",
-                    "hit_side_color","hit_line_color","scanned_side_color","scanned_line_color",
-                    "playing_side_color","playing_line_color","pitch_text_color","remaining_text_color"};
-                static constexpr const char* colorFallbacks[]={
-                    "Untuned Side Color","Untuned Line Color","Tuned Side Color","Tuned Line Color",
-                    "Hit Side Color","Hit Line Color","Scanned Side Color","Scanned Line Color",
-                    "Playing Side Color","Playing Line Color","Pitch Text Color","Remaining Text Color"};
-                for (int i=0;i<12;++i) {
-                    bool openEditor=false;
-                    const auto label = translate(std::string("notebot.ui.") + colorKeys[i], colorFallbacks[i]);
-                    const auto colorTip = translate("notebot.ui.render_color_tip", "Noteblock render color");
-                    changed |= colorRow(label.c_str(),colorTip.c_str(),settings.renderColors[size_t(i)],defaults.renderColors[size_t(i)],settings.rainbowColors[size_t(i)],width,openEditor);
-                    if (openEditor) editingColor_=i;
-                }
-                const auto noteScale = translate("notebot.ui.note_text_scale", "Note Text Scale");
-                const auto noteScaleTip = translate("notebot.ui.note_text_scale_tip", "Scale of note text.");
-                changed |= floatRow(noteScale.c_str(),noteScaleTip.c_str(),settings.noteTextScale,defaults.noteTextScale,0.5f,3.0f,width);
-                const auto noteHeight = translate("notebot.ui.note_text_height", "Note Text Height");
-                const auto noteHeightTip = translate("notebot.ui.note_text_height_tip",
-                    "Height of note text above blocks.");
-                changed |= floatRow(noteHeight.c_str(),noteHeightTip.c_str(),settings.noteTextHeight,defaults.noteTextHeight,0.5f,2.5f,width);
-                const auto boxExpansion = translate("notebot.ui.box_expansion", "Box Expansion");
-                const auto boxExpansionTip = translate("notebot.ui.box_expansion_tip",
-                    "Distance between outline and block face.");
-                changed |= floatRow(boxExpansion.c_str(),boxExpansionTip.c_str(),settings.boxExpansion,defaults.boxExpansion,0.0f,0.08f,width);
-                const auto showUnmapped = translate("notebot.ui.show_unmapped", "Show Unmapped Boxes");
-                const auto showUnmappedTip = translate("notebot.ui.show_unmapped_tip",
-                    "Show scanned blocks without a mapped song note");
-                changed |= boolRow(showUnmapped.c_str(),showUnmappedTip.c_str(),settings.showScannedNoteblocks,defaults.showScannedNoteblocks,width);
-            }
             if (changed && actions.settingsChanged) actions.settingsChanged(settings);
             horizontalSeparator(width);
             const auto openSongGui = translate("notebot.ui.open_song_gui", "Open Song GUI");
@@ -506,10 +315,10 @@ void NotebotUi::drawModule() {
             ImGui::TextWrapped("%s", playbackStatus.c_str());
             const auto pause = translate("notebot.ui.pause", "Pause");
             const auto play = translate("notebot.ui.play", "Play");
-            if (button(playing?pause.c_str():play.c_str(),68) && actions.pauseResume) actions.pauseResume();
-            ImGui::SameLine(0,3);
+            if (button(playing?pause.c_str():play.c_str(),theme::px(68)) && actions.pauseResume) actions.pauseResume();
+            ImGui::SameLine(0,theme::px(3));
             const auto stop = translate("notebot.ui.stop", "Stop");
-            if (button(stop.c_str(),48) && actions.stop) actions.stop();
+            if (button(stop.c_str(),theme::px(48)) && actions.stop) actions.stop();
             if (songLoaded) {
                 const auto songLabel = translate("notebot.ui.song", "Song: {0}");
                 const auto songText = fmt::format(fmt::runtime(songLabel), songTitle);
@@ -535,32 +344,121 @@ void NotebotUi::drawModule() {
                 }
             }
             const auto scanNoteBlocks = translate("notebot.ui.scan_note_blocks", "Scan NoteBlocks");
-            if (button(scanNoteBlocks.c_str(),(width-3)/2) && actions.scanNoteBlocks) actions.scanNoteBlocks();
-            ImGui::SameLine(0,3);
+            if (button(scanNoteBlocks.c_str(),(width-theme::px(3))/2) && actions.scanNoteBlocks) actions.scanNoteBlocks();
+            ImGui::SameLine(0,theme::px(3));
             const auto clearNoteBlocks = translate("notebot.ui.clear_note_blocks", "Clear NoteBlocks");
-            if (button(clearNoteBlocks.c_str(),(width-3)/2) && actions.clearNoteBlocks) actions.clearNoteBlocks();
-            const auto bindSection = translate("notebot.ui.bind", "Bind");
-            if (section(bindSection.c_str(),bindExpanded_,width)) {
-                const auto bindLabel = translate("notebot.ui.bind_label", "Open UI:");
-                Row row=beginRow(bindLabel.c_str(),nullptr,width);
-                const auto bindingLabel = binding_ == BindTarget::Interface ? std::string("...") : keybindLabel(keybind);
-                if (button(bindingLabel.c_str(),rowControlWidth(row))) binding_=BindTarget::Interface;
-                if (resetAt(row)) { keybind="L"; binding_=BindTarget::None; if(actions.bindChanged) actions.bindChanged(keybind); }
-                finishRow(row);
-                const auto playbackBindLabel = translate("notebot.ui.playback_bind_label", "Play / Pause:");
-                Row playbackRow=beginRow(playbackBindLabel.c_str(),nullptr,width);
-                const auto playbackBindingLabel = binding_ == BindTarget::Playback ? std::string("...") : keybindLabel(playbackKeybind);
-                if (button(playbackBindingLabel.c_str(),rowControlWidth(playbackRow))) binding_=BindTarget::Playback;
-                if (resetAt(playbackRow)) { playbackKeybind="P"; binding_=BindTarget::None; if(actions.playbackBindChanged) actions.playbackBindChanged(playbackKeybind); }
-                finishRow(playbackRow);
-            }
+            if (button(clearNoteBlocks.c_str(),(width-theme::px(3))/2) && actions.clearNoteBlocks) actions.clearNoteBlocks();
             ImGui::EndGroup();
-            ImGui::Dummy(ImVec2(1,8));
+            ImGui::Dummy(ImVec2(1,theme::px(8)));
             ImGui::EndChild();
         }
     }
     ImGui::End();
-    ImGui::PopStyleColor(5);
+    ImGui::PopStyleVar(5);
+}
+
+void NotebotUi::drawRender() {
+    iconTextures = {resetIcon, copyIcon, pasteIcon};
+    const auto* viewport = ImGui::GetMainViewport();
+    const float headerHeight = widgets::headerHeight();
+    const float height = std::min(theme::px(660),theme::windowHeightLimit());
+    ImGui::SetNextWindowPos(theme::windowCenter(), ImGuiCond_FirstUseEver, ImVec2(.5f, .5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(theme::px(650), viewport->Size.x-16), height), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(theme::px(420), viewport->Size.x-16), headerHeight), ImVec2(FLT_MAX, FLT_MAX));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(theme::px(3),theme::px( 3)));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(theme::px(6),theme::px( 6)));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, theme::px(2));
+    const auto title = translate("notebot.ui.render", "Render");
+    if (ImGui::Begin((title + "###notebot-render").c_str(), nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar)) {
+        auto& state = renderWindow_;
+        if (!state.loaded) {
+            state.expanded = ImGui::GetWindowHeight() > headerHeight + 10;
+            state.loaded = true;
+        }
+        const bool wasExpanded = state.expanded;
+        if (wasExpanded) state.expandedHeight = ImGui::GetWindowHeight();
+        widgets::windowHeader(title, state.expanded);
+        if (wasExpanded != state.expanded)
+            ImGui::SetWindowSize(ImVec2(ImGui::GetWindowWidth(), state.expanded ? state.expandedHeight : headerHeight));
+        if (state.expanded) {
+            ImGui::BeginChild("##render-content", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
+            ImGui::SetCursorPosX(theme::px(8));
+            ImGui::BeginGroup();
+            const float width = std::max(1.f, ImGui::GetContentRegionAvail().x - 8);
+            const NotebotSettings defaults;
+            bool changed = false;
+            const auto hideNowPlaying = translate("notebot.ui.hide_now_playing", "Hide Now Playing");
+            const auto showNowPlayingLabel = translate("notebot.ui.show_now_playing", "Show Now Playing");
+            if (button(showNowPlaying ? hideNowPlaying.c_str() : showNowPlayingLabel.c_str(), width)) {
+                showNowPlaying = !showNowPlaying;
+                if (actions.nowPlayingVisibilityChanged)
+                    actions.nowPlayingVisibilityChanged(showNowPlaying);
+            }
+            const auto resetNowPlaying = translate("notebot.ui.reset_now_playing", "Reset Now Playing Position");
+            if (button(resetNowPlaying.c_str(), width) && actions.resetNowPlayingPosition)
+                actions.resetNowPlayingPosition();
+            const auto renderText = translate("notebot.ui.render_text", "Render Text");
+            const auto renderTextTip = translate("notebot.ui.render_text_tip",
+                "Whether to render text above noteblocks");
+            changed |= boolRow(renderText.c_str(),renderTextTip.c_str(),settings.renderText,defaults.renderText,width);
+            const auto renderBoxes = translate("notebot.ui.render_boxes", "Render Boxes");
+            const auto renderBoxesTip = translate("notebot.ui.render_boxes_tip",
+                "Whether to render noteblock outlines");
+            changed |= boolRow(renderBoxes.c_str(),renderBoxesTip.c_str(),settings.renderBoxes,defaults.renderBoxes,width);
+            const auto throughWalls = translate("notebot.ui.render_through_walls", "Render Through Walls");
+            const auto throughWallsTip = translate("notebot.ui.render_through_walls_tip",
+                "Show note-block outlines and filled faces through walls");
+            changed |= boolRow(throughWalls.c_str(),throughWallsTip.c_str(),settings.renderBoxThroughWalls,defaults.renderBoxThroughWalls,width);
+            const auto hitFade = translate("notebot.ui.hit_fade", "Hit Fade Time (seconds)");
+            const auto hitFadeTip = translate("notebot.ui.hit_fade_tip",
+                "Time for playback highlights to fade back to the normal block color");
+            changed |= floatRow(hitFade.c_str(),hitFadeTip.c_str(),settings.hitFadeSeconds,defaults.hitFadeSeconds,0.0f,5.0f,width);
+            const auto lines = translate("notebot.ui.lines", "Lines");
+            const auto sides = translate("notebot.ui.sides", "Sides");
+            const auto both = translate("notebot.ui.both", "Both");
+            const char* shapes[]={lines.c_str(),sides.c_str(),both.c_str()};
+            const auto shapeMode = translate("notebot.ui.shape_mode", "Shape Mode");
+            changed |= enumRow(shapeMode.c_str(),nullptr,settings.shapeMode,defaults.shapeMode,shapes,3,width);
+            static constexpr const char* colorKeys[]={
+                "untuned_side_color","untuned_line_color","tuned_side_color","tuned_line_color",
+                "hit_side_color","hit_line_color","scanned_side_color","scanned_line_color",
+                "playing_side_color","playing_line_color","pitch_text_color","remaining_text_color"};
+            static constexpr const char* colorFallbacks[]={
+                "Untuned Side Color","Untuned Line Color","Tuned Side Color","Tuned Line Color",
+                "Hit Side Color","Hit Line Color","Scanned Side Color","Scanned Line Color",
+                "Playing Side Color","Playing Line Color","Pitch Text Color","Remaining Text Color"};
+            for (int i=0;i<12;++i) {
+                bool openEditor=false;
+                const auto label = translate(std::string("notebot.ui.") + colorKeys[i], colorFallbacks[i]);
+                const auto colorTip = translate("notebot.ui.render_color_tip", "Noteblock render color");
+                changed |= colorRow(label.c_str(),colorTip.c_str(),settings.renderColors[size_t(i)],defaults.renderColors[size_t(i)],settings.rainbowColors[size_t(i)],width,openEditor);
+                if (openEditor) editingColor_=i;
+            }
+            const auto noteScale = translate("notebot.ui.note_text_scale", "Note Text Scale");
+            const auto noteScaleTip = translate("notebot.ui.note_text_scale_tip", "Scale of note text.");
+            changed |= floatRow(noteScale.c_str(),noteScaleTip.c_str(),settings.noteTextScale,defaults.noteTextScale,0.5f,3.0f,width);
+            const auto noteHeight = translate("notebot.ui.note_text_height", "Note Text Height");
+            const auto noteHeightTip = translate("notebot.ui.note_text_height_tip",
+                "Height of note text above blocks.");
+            changed |= floatRow(noteHeight.c_str(),noteHeightTip.c_str(),settings.noteTextHeight,defaults.noteTextHeight,0.5f,2.5f,width);
+            const auto boxExpansion = translate("notebot.ui.box_expansion", "Box Expansion");
+            const auto boxExpansionTip = translate("notebot.ui.box_expansion_tip",
+                "Distance between outline and block face.");
+            changed |= floatRow(boxExpansion.c_str(),boxExpansionTip.c_str(),settings.boxExpansion,defaults.boxExpansion,0.0f,0.08f,width);
+            const auto showUnmapped = translate("notebot.ui.show_unmapped", "Show Unmapped Boxes");
+            const auto showUnmappedTip = translate("notebot.ui.show_unmapped_tip",
+                "Show scanned blocks without a mapped song note");
+            changed |= boolRow(showUnmapped.c_str(),showUnmappedTip.c_str(),settings.showScannedNoteblocks,defaults.showScannedNoteblocks,width);
+            if (changed && actions.settingsChanged) actions.settingsChanged(settings);
+            ImGui::EndGroup();
+            ImGui::Dummy(ImVec2(1,theme::px( 8)));
+            ImGui::EndChild();
+        }
+    }
+    ImGui::End();
     ImGui::PopStyleVar(5);
 }
 
@@ -571,18 +469,16 @@ void NotebotUi::drawColorEditor() {
     auto& rgba=settings.renderColors[size_t(editingColor_)];
 
     const ImGuiViewport* viewport=ImGui::GetMainViewport();
-    const float windowHeight=std::min(650.0f,std::max(200.0f,viewport->Size.y-128.0f));
-    const float headerHeight=ImGui::GetFontSize()*1.25f+8;
-    ImGui::SetNextWindowPos(viewport->GetCenter(),ImGuiCond_FirstUseEver,ImVec2(0.5f,0.5f));
-    ImGui::SetNextWindowSize(ImVec2(416,windowHeight),ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(300,headerHeight),ImVec2(FLT_MAX,FLT_MAX));
+    const float windowHeight=std::min(theme::px(650),theme::windowHeightLimit());
+    const float headerHeight=ImGui::GetFontSize()*1.25f+theme::px(8);
+    ImGui::SetNextWindowPos(theme::windowCenter(),ImGuiCond_FirstUseEver,ImVec2(0.5f,0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(theme::px(416), viewport->Size.x-16),windowHeight),ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(theme::px(300), viewport->Size.x-16),headerHeight),ImVec2(FLT_MAX,FLT_MAX));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(0,0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(3,3));
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(6,6));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,2);
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,ImVec4(20/255.f,20/255.f,20/255.f,160/255.f));
-    ImGui::PushStyleColor(ImGuiCol_Border,ImVec4(0,0,0,1));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(theme::px(3),theme::px(3)));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(theme::px(6),theme::px(6)));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,theme::px(2));
     const auto selectColor = translate("notebot.ui.select_color", "Select Color");
     if (ImGui::Begin("Select Color##meteor",nullptr,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoScrollbar)) {
         if (!colorLayoutLoaded_) {
@@ -594,26 +490,8 @@ void NotebotUi::drawColorEditor() {
             colorExpandedWidth_=ImGui::GetWindowSize().x;
             colorExpandedHeight_=ImGui::GetWindowSize().y;
         }
-        const float headerWidth=ImGui::GetContentRegionAvail().x;
-        const ImVec2 hp=ImGui::GetCursorScreenPos();
-        ImGui::InvisibleButton("##color-header",ImVec2(headerWidth,headerHeight));
-        ImDrawList* draw=ImGui::GetWindowDrawList();
-        draw->AddRectFilled(hp,ImVec2(hp.x+headerWidth,hp.y+headerHeight),col(145,61,226));
-        const ImVec2 title=ImGui::CalcTextSize(selectColor.c_str());
-        draw->AddText(ImVec2(hp.x+(headerWidth-title.x)/2,hp.y+(headerHeight-title.y)/2),col(255,255,255),selectColor.c_str());
-        const float tx=hp.x+headerWidth-13,ty=hp.y+headerHeight/2;
-        if (colorExpanded_) draw->AddTriangleFilled(ImVec2(tx-5,ty-2),ImVec2(tx+5,ty-2),ImVec2(tx,ty+4),col(20,20,20,200));
-        else draw->AddTriangleFilled(ImVec2(tx-2,ty-5),ImVec2(tx-2,ty+5),ImVec2(tx+4,ty),col(20,20,20,200));
-        static bool wasDragged=false;
-        if (ImGui::IsItemActivated()) wasDragged=false;
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) colorExpanded_=!colorExpanded_;
-        if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left,2.0f)) {
-            wasDragged=true;
-            const ImVec2 pos=ImGui::GetWindowPos(), delta=ImGui::GetIO().MouseDelta;
-            ImGui::SetWindowPos(ImVec2(pos.x+delta.x,pos.y+delta.y));
-        }
-        if (ImGui::IsItemDeactivated() && ImGui::IsMouseReleased(ImGuiMouseButton_Left) && !wasDragged)
-            colorExpanded_=!colorExpanded_;
+        widgets::windowHeader(selectColor, colorExpanded_);
+        ImDrawList* draw = ImGui::GetWindowDrawList();
         if (wasExpanded && !colorExpanded_)
             ImGui::SetWindowSize(ImVec2(colorExpandedWidth_,headerHeight));
         else if (!wasExpanded && colorExpanded_)
@@ -621,14 +499,14 @@ void NotebotUi::drawColorEditor() {
         if (colorExpanded_) {
             ImGui::BeginChild("##color-view",ImVec2(0,ImGui::GetContentRegionAvail().y),false,
                               ImGuiWindowFlags_NoScrollbar);
-            ImGui::SetCursorPosX(8);
+            ImGui::SetCursorPosX(theme::px(8));
             ImGui::BeginGroup();
-            const float width=std::max(260.0f,ImGui::GetContentRegionAvail().x-8.0f);
+            const float width=std::max(theme::px(260),ImGui::GetContentRegionAvail().x-theme::px(8));
             bool changed=false;
             const ImVec2 preview=ImGui::GetCursorScreenPos();
-            ImGui::InvisibleButton("##display",ImVec2(width,32));
+            ImGui::InvisibleButton("##display",ImVec2(width,theme::px(32)));
             draw=ImGui::GetWindowDrawList();
-            draw->AddRectFilled(preview,ImVec2(preview.x+width,preview.y+32),
+            draw->AddRectFilled(preview,ImVec2(preview.x+width,preview.y+theme::px(32)),
                 ImGui::ColorConvertFloat4ToU32(ImVec4(rgba[0],rgba[1],rgba[2],rgba[3])));
 
             float hue,saturation,value;
@@ -646,11 +524,11 @@ void NotebotUi::drawColorEditor() {
             draw=ImGui::GetWindowDrawList();
             draw->AddRectFilledMultiColor(square,ImVec2(square.x+width,square.y+width),
                 col(255,255,255),col(int(hr*255),int(hg*255),int(hb*255)),col(0,0,0),col(0,0,0));
-            draw->AddRect(ImVec2(square.x+saturation*width-3,square.y+(1-value)*width-3),
-                          ImVec2(square.x+saturation*width+3,square.y+(1-value)*width+3),col(255,255,255));
+            draw->AddRect(ImVec2(square.x+saturation*width-theme::px(3),square.y+(1-value)*width-theme::px(3)),
+                          ImVec2(square.x+saturation*width+theme::px(3),square.y+(1-value)*width+theme::px(3)),col(255,255,255));
 
             const ImVec2 strip=ImGui::GetCursorScreenPos();
-            ImGui::InvisibleButton("##hue",ImVec2(width,10));
+            ImGui::InvisibleButton("##hue",ImVec2(width,theme::px(10)));
             if (ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                 hue=std::clamp((ImGui::GetIO().MousePos.x-strip.x)/width,0.0f,1.0f);
                 ImGui::ColorConvertHSVtoRGB(hue,saturation,value,rgba[0],rgba[1],rgba[2]);
@@ -661,33 +539,33 @@ void NotebotUi::drawColorEditor() {
                 float r1,g1,b1,r2,g2,b2;
                 ImGui::ColorConvertHSVtoRGB(i/6.0f,1,1,r1,g1,b1);
                 ImGui::ColorConvertHSVtoRGB((i+1)/6.0f,1,1,r2,g2,b2);
-                draw->AddRectFilledMultiColor(ImVec2(strip.x+width*i/6,strip.y),ImVec2(strip.x+width*(i+1)/6,strip.y+10),
+                draw->AddRectFilledMultiColor(ImVec2(strip.x+width*i/6,strip.y),ImVec2(strip.x+width*(i+1)/6,strip.y+theme::px(10)),
                     col(int(r1*255),int(g1*255),int(b1*255)),col(int(r2*255),int(g2*255),int(b2*255)),
                     col(int(r2*255),int(g2*255),int(b2*255)),col(int(r1*255),int(g1*255),int(b1*255)));
             }
-            draw->AddRectFilled(ImVec2(strip.x+hue*width-1,strip.y),ImVec2(strip.x+hue*width+1,strip.y+10),col(255,255,255));
+            draw->AddRectFilled(ImVec2(strip.x+hue*width-theme::px(1),strip.y),ImVec2(strip.x+hue*width+theme::px(1),strip.y+theme::px(10)),col(255,255,255));
 
             static constexpr const char* labels[]={"R:","G:","B:","A:"};
             for (int i=0;i<4;++i) {
                 ImGui::PushID(i);
                 int channel=int(std::round(rgba[size_t(i)]*255));
                 ImGui::TextUnformatted(labels[i]);
-                ImGui::SameLine(42);
-                ImGui::SetNextItemWidth(75);
+                ImGui::SameLine(theme::px(42));
+                ImGui::SetNextItemWidth(theme::px(75));
                 if (ImGui::InputInt("##channel",&channel,0,0)) { rgba[size_t(i)]=std::clamp(channel,0,255)/255.0f; changed=true; }
-                ImGui::SameLine(0,3);
+                ImGui::SameLine(0,theme::px(3));
                 if (slider("##channel-slider",channel,0,255)) { rgba[size_t(i)]=channel/255.0f; changed=true; }
                 ImGui::PopID();
             }
             const auto rainbowLabel = translate("notebot.ui.rainbow", "Rainbow:");
             ImGui::TextUnformatted(rainbowLabel.c_str());
-            ImGui::SameLine(width-30);
+            ImGui::SameLine(width-theme::px(30));
             if (checkBox("##rainbow",settings.rainbowColors[size_t(editingColor_)])) changed=true;
             if (changed && actions.settingsChanged) actions.settingsChanged(settings);
-            const float backWidth=width-99;
+            const float backWidth=width-theme::px(99);
             const auto back = translate("notebot.ui.back", "Back");
             if (button(back.c_str(),backWidth)) editingColor_=-1;
-            ImGui::SameLine(0,3);
+            ImGui::SameLine(0,theme::px(3));
             const auto copyColor = translate("notebot.ui.copy_color", "Copy color");
             if (iconButton("##copy",copyColor.c_str(),1)) {
                 std::ostringstream text;
@@ -695,7 +573,7 @@ void NotebotUi::drawColorEditor() {
                 for (float channel:rgba) text << std::setw(2) << std::clamp(int(std::round(channel*255)),0,255);
                 ImGui::SetClipboardText(text.str().c_str());
             }
-            ImGui::SameLine(0,3);
+            ImGui::SameLine(0,theme::px(3));
             const auto pasteColor = translate("notebot.ui.paste_color", "Paste color");
             if (iconButton("##paste",pasteColor.c_str(),2)) {
                 const char* clipboard=ImGui::GetClipboardText();
@@ -709,7 +587,7 @@ void NotebotUi::drawColorEditor() {
                     }
                 }
             }
-            ImGui::SameLine(0,3);
+            ImGui::SameLine(0,theme::px(3));
             const auto resetColor = translate("notebot.ui.reset_color", "Reset color");
             if (iconButton("##reset",resetColor.c_str(),0)) {
                 rgba=NotebotSettings{}.renderColors[size_t(editingColor_)];
@@ -717,12 +595,11 @@ void NotebotUi::drawColorEditor() {
                 if (actions.settingsChanged) actions.settingsChanged(settings);
             }
             ImGui::EndGroup();
-            ImGui::Dummy(ImVec2(1,8));
+            ImGui::Dummy(ImVec2(1,theme::px(8)));
             ImGui::EndChild();
         }
     }
     ImGui::End();
-    ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(5);
 }
 
