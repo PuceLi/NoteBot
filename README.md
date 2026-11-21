@@ -28,35 +28,41 @@ Make sure the **LeviLamina** dependency is installed.
 
 ### Preparing Songs
 
-1. On the main interface, click **Open Song List** → **Open Song Folder**, then place your `.nbs` files into the folder.
-2. Once added, click **Refresh** to update the list.
+1. On the main screen, click **Open Song GUI** → **Open Song Folder**, and place your `.nbs` song files into the folder
+2. Once the files are added, click **Refresh** to update the list
 
-### Loading & Playing
+### Loading and Playing
 
-1. Enter a world, stand near the note blocks you want to use, and switch to Survival Mode.
-2. Press `L` to open the NoteBot interface (the hotkey can be rebound under **Keybindings**).
-3. Click **Open Song List**, find your song, and click **Load**.
-4. Return to the main menu and click **Play**, or press `P`. The mod will scan nearby note blocks, match the required pitches (tuning them beforehand if necessary), and begin playing. Press `P` again to pause or resume; this hotkey can also be changed under **Keybindings**.
+1. Enter a world, stand near the note blocks you want to use, and switch to Survival mode
+2. Press `L` to open the NoteBot main UI; you can change the keybinding under **Mod Settings** → **Bind**
+3. Click **Open Song GUI**, then click **Load** next to the song you want to use
+4. Return to the main UI and click **Play** or press `P`. The mod will scan nearby note blocks, match the required notes, tune the note blocks if needed, and start playing
 
-You can also click **Scan Note Blocks** first to verify nearby block matching. The song status will display the number of available note blocks and any missing notes; expand **Missing Notes** to view the specific missing pitches.
+You can also click **Scan NoteBlocks** first to check the matching status of nearby note blocks. The song status will display the number of found note blocks and missing notes; expand **Missing notes** to view the specific missing items.
 
-Under **General**, **Concurrent Tune Blocks** controls how many different note blocks can be tuned at once (1–20, default 1). Each block waits for its pitch update before being clicked again; **Tune Interval** applies separately to each block.
+Under **General**, you can configure **Concurrent Tune Blocks** to tune multiple distinct note blocks simultaneously; this feature may not work in multiplayer.
 
 ### Previewing Songs
 
-Click **Play** directly in the song list to preview a song without needing to enter a world.
+Click **Preview** in the song list to preview a song without entering a world.
+
+### Backup and Import
+
+Open **Mod Settings → Mod Data** from the top menu to back up or import mod configurations and songs.
 
 ## Project Status
 
-This mod currently has several known issues.
-[Issue](https://github.com/PuceLi/NoteBot/issues) is welcome below.
+This mod still has many unknown issues; feel free to report them in [Issues](https://github.com/PuceLi/NoteBot/issues).
 
-## Third-Party Credits
+Due to limited development time, updates for this project may be relatively slow.
 
-- [Meteor Client(GPL-3.0)](https://github.com/MeteorDevelopment/meteor-client) - Ported UI to this project
+## Credits
 
-## Vedio
+- [Meteor Client (GPL-3.0)](https://github.com/MeteorDevelopment/meteor-client) - UI ported to this project
+- [rsnbs (MIT)](https://github.com/omninbs/rsnbs) - Referenced for its NBS parser implementation
 
-[YouTuBe](https://youtu.be/JvPiIVKTFDY)
+## Video Showcase
 
-[BiliBili](https://www.bilibili.com/video/BV1mmHk6dEop)
+[YouTube](https://youtu.be/JvPiIVKTFDY)
+
+[Bilibili](https://www.bilibili.com/video/BV1mmHk6dEop)
