@@ -36,7 +36,7 @@ Make sure the **LeviLamina** dependency is installed.
 1. Enter a world, stand near the note blocks you want to use, and switch to Survival Mode.
 2. Press `L` to open the NoteBot interface (the hotkey can be rebound under **Keybindings**).
 3. Click **Open Song List**, find your song, and click **Load**.
-4. Return to the main menu and click **Play**. The mod will scan nearby note blocks, match the required pitches (tuning them beforehand if necessary), and begin playing.
+4. Return to the main menu and click **Play**, or press `P`. The mod will scan nearby note blocks, match the required pitches (tuning them beforehand if necessary), and begin playing. Press `P` again to pause or resume; this hotkey can also be changed under **Keybindings**.
 
 You can also click **Scan Note Blocks** first to verify nearby block matching. The song status will display the number of available note blocks and any missing notes; expand **Missing Notes** to view the specific missing pitches.
 
