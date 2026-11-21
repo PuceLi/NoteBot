@@ -85,7 +85,7 @@ bool sanitizeConfig(NoteBotConfig& cfg) {
         clampInt(instrument, 0, static_cast<int>(kMappedInstrumentCount));
     }
     clampInt(cfg.checkNoteblocksDelay, 1, 100);
-    clampInt(cfg.tickDelay, 0, 20);
+    clampFloat(cfg.playbackSpeed, 0.02f, 2.0f, defaults.playbackSpeed);
     clampInt(cfg.tuneIntervalTicks, 0, 20);
     clampInt(cfg.keybinds.hotkey, 0, 255);
     clampFloat(cfg.noteTextScale, 0.5f, 3.0f, defaults.noteTextScale);

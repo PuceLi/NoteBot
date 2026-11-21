@@ -103,7 +103,6 @@ private:
     std::atomic<bool> mWorldPaused{false};
     uint64_t mLastSimulationTick = 0;
     bool mHasSimulationTick = false;
-    uint64_t mNextWorldPlaybackTick = 0;
     bool mHasWorldPlaybackTick = false;
     std::chrono::steady_clock::time_point mLastSimulationAdvance;
     std::vector<TuneTarget> mTuneTargets;

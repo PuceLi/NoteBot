@@ -192,7 +192,7 @@ void NoteBotPlayer::stopInternal() {
 
 void NoteBotPlayer::updatePreviewSounds(bool stopAll) {
     auto clientRef = ll::service::getClientInstance();
-    auto* client = clientRef.has_value() ? &clientRef.value() : nullptr;
+    auto* client = clientRef ? &*clientRef : nullptr;
     if (!client) {
         mPreviewSoundHandles.clear();
         return;
@@ -224,7 +224,7 @@ void NoteBotPlayer::beginTuning() {
         return;
     }
     auto clientRef = ll::service::getClientInstance();
-    auto* player = clientRef.has_value() ? clientRef.value().getLocalPlayer() : nullptr;
+    auto* player = clientRef ? clientRef->getLocalPlayer() : nullptr;
     if (!player) {
         mStage = Stage::Error;
         mError = ui::translate("notebot.error.no_world_playing", "No active world for playing");
@@ -301,11 +301,11 @@ bool NoteBotPlayer::refreshTuneTarget(TuneTarget& target, BlockSource& blockSour
 
 bool NoteBotPlayer::updateTuneTargets() {
     auto clientRef = ll::service::getClientInstance();
-    if (!clientRef.has_value()) {
+    if (!clientRef) {
         mError = ui::translate("notebot.error.no_world_tuning", "No active world for tuning");
         return false;
     }
-    auto* player = clientRef.value().getLocalPlayer();
+    auto* player = clientRef->getLocalPlayer();
     if (!player) {
         mError = ui::translate("notebot.error.no_player_tuning", "No local player for tuning");
         return false;
@@ -321,7 +321,7 @@ bool NoteBotPlayer::updateTuneTargets() {
 void NoteBotPlayer::tickTuning() {
     if (mAwaitingTuneUpdate) {
         auto clientRef = ll::service::getClientInstance();
-        auto* player = clientRef.has_value() ? clientRef.value().getLocalPlayer() : nullptr;
+        auto* player = clientRef ? clientRef->getLocalPlayer() : nullptr;
         if (!player) {
             mStage = Stage::Error;
             mError = ui::translate("notebot.error.no_player_verifying",
@@ -381,7 +381,7 @@ void NoteBotPlayer::tickTuning() {
                                      [](const TuneTarget& target) { return target.remainingHits == 0; });
         if (done) {
             auto clientRef = ll::service::getClientInstance();
-            auto* player = clientRef.has_value() ? clientRef.value().getLocalPlayer() : nullptr;
+            auto* player = clientRef ? clientRef->getLocalPlayer() : nullptr;
             if (player && player->getPlayerGameType() == GameType::Survival) {
                 mStage = Stage::Playing;
                 mIsPlaying = true;
@@ -414,7 +414,7 @@ void NoteBotPlayer::tickTuning() {
         mTunePlanReady = true;
     }
     auto clientRef = ll::service::getClientInstance();
-    auto* player = clientRef.has_value() ? clientRef.value().getLocalPlayer() : nullptr;
+    auto* player = clientRef ? clientRef->getLocalPlayer() : nullptr;
     if (!player) {
         mStage = Stage::Error;
         mError = ui::translate("notebot.error.no_player_tuning", "No local player for tuning");
@@ -509,8 +509,8 @@ void NoteBotPlayer::tickInternal() {
     const int scanRadius = mPendingScanRadius.exchange(-1, std::memory_order_acq_rel);
     if (scanRadius >= 0) {
         auto clientRef = ll::service::getClientInstance();
-        if (clientRef.has_value()) {
-            auto& client = clientRef.value();
+        if (clientRef) {
+            auto& client = *clientRef;
             if (auto* player = client.getLocalPlayer()) {
                 auto& blockSource = player->getDimensionBlockSource();
                 scanAndMapNoteBlocks(blockSource, BlockPos(player->getPosition()),
@@ -544,7 +544,7 @@ void NoteBotPlayer::tickInternal() {
 
     if (mStage == Stage::Playing && mIsPlaying && !mPreviewMode) {
         auto clientRef = ll::service::getClientInstance();
-        auto* player = clientRef.has_value() ? clientRef.value().getLocalPlayer() : nullptr;
+        auto* player = clientRef ? clientRef->getLocalPlayer() : nullptr;
         if (player && player->getPlayerGameType() != GameType::Survival) {
             mIsPlaying = false;
             mStage = Stage::Error;
@@ -559,7 +559,7 @@ void NoteBotPlayer::tickInternal() {
     if (mAutoRefreshNearby && mSong && mStage == Stage::Ready && now >= mNextReadyScanTime) {
         mNextReadyScanTime = now + std::chrono::milliseconds(500);
         auto clientRef = ll::service::getClientInstance();
-        auto* player = clientRef.has_value() ? clientRef.value().getLocalPlayer() : nullptr;
+        auto* player = clientRef ? clientRef->getLocalPlayer() : nullptr;
         if (player) {
             auto& blockSource = player->getDimensionBlockSource();
             mNoteBlockManager.scanNearbyNoteBlocks(blockSource, BlockPos(player->getPosition()),
@@ -573,9 +573,9 @@ void NoteBotPlayer::tickInternal() {
     const bool activeBlockPlayback = mStage == Stage::Playing && mIsPlaying && !mPreviewMode;
     if (!mPreviewMode && mStage != Stage::Error &&
         (!activeBlockPlayback || pitchRefreshNow >= mNextPitchRefreshTime)) {
-        if (auto clientRef = ll::service::getClientInstance(); clientRef.has_value()) {
-            if (auto* player = clientRef.value().getLocalPlayer();
-                player && !clientRef.value().isShowingPauseScreen()) {
+        if (auto clientRef = ll::service::getClientInstance(); clientRef) {
+            if (auto* player = clientRef->getLocalPlayer();
+                player && !clientRef->isShowingPauseScreen()) {
                 mNoteBlockManager.refreshPitches(player->getDimensionBlockSource());
                 if (activeBlockPlayback)
                     mNextPitchRefreshTime = pitchRefreshNow + std::chrono::milliseconds(100);
@@ -586,7 +586,7 @@ void NoteBotPlayer::tickInternal() {
     bool worldTickAvailable = false;
     if (mStage == Stage::Tuning || mStage == Stage::Verifying || mStage == Stage::Playing) {
         auto clientRef = ll::service::getClientInstance();
-        auto* client = clientRef.has_value() ? &clientRef.value() : nullptr;
+        auto* client = clientRef ? &*clientRef : nullptr;
         auto* player = client ? client->getLocalPlayer() : nullptr;
         if (!client || (!mPreviewMode && !player)) {
             mWorldPaused.store(true, std::memory_order_release);
@@ -601,10 +601,10 @@ void NoteBotPlayer::tickInternal() {
         } else {
             bool paused = client->isShowingPauseScreen() || player->getLevel().getSimPaused();
             bool sameSimulationTick = false;
-            if (auto levelRef = ll::service::getLevel(); levelRef.has_value()) {
+            if (auto levelRef = ll::service::getLevel(); levelRef) {
                 worldTickAvailable = true;
-                paused = paused || levelRef.value().getSimPaused();
-                const uint64_t worldTick = levelRef.value().getCurrentTick().tickID;
+                paused = paused || levelRef->getSimPaused();
+                const uint64_t worldTick = levelRef->getCurrentTick().tickID;
                 sameSimulationTick = mHasSimulationTick && worldTick == mLastSimulationTick;
                 if (!sameSimulationTick) {
                     mLastSimulationTick = worldTick;
@@ -637,36 +637,38 @@ void NoteBotPlayer::tickInternal() {
         mHasWorldPlaybackTick = false;
         return;
     }
+    int ticksToPlay = 0;
     if (mPreviewMode || !worldTickAvailable) {
         if (!worldTickAvailable) mHasWorldPlaybackTick = false;
-        if (!mPlaybackClock.advance(std::chrono::steady_clock::now(), mConfig.tickDelay)) return;
+        ticksToPlay = mPlaybackClock.advance(std::chrono::steady_clock::now(), mConfig.playbackSpeed);
     } else {
-        // In-world playback already has a canonical 20 Hz clock. Using the real-time
-        // clock here as well would add another 50 ms gate on top of each world tick.
+        // In-world playback already has a canonical 20 Hz clock. Using the real-time clock here as well would add another 50 ms gate on top of each world tick.
         if (!mHasWorldPlaybackTick) {
-            mNextWorldPlaybackTick = mLastSimulationTick;
+            mPlaybackClock.reset();
             mHasWorldPlaybackTick = true;
         }
-        if (mLastSimulationTick < mNextWorldPlaybackTick) return;
-        mNextWorldPlaybackTick = mLastSimulationTick +
-            static_cast<uint64_t>(std::clamp(mConfig.tickDelay, 0, 20) + 1);
+        ticksToPlay = mPlaybackClock.advanceWorld(mLastSimulationTick, mConfig.playbackSpeed);
     }
+    if (ticksToPlay == 0) return;
 
-    if (mCurrentTick > mSong->lastTick) {
-        if (mConfig.autoPlay && !mPreviewMode) {
-            mCurrentTick = 0;
-        } else {
-            stopInternal();
+    for (int step = 0; step < ticksToPlay; ++step) {
+        if (mCurrentTick > mSong->lastTick) {
+            if (mConfig.autoPlay && !mPreviewMode) {
+                mCurrentTick = 0;
+            } else {
+                stopInternal();
+            }
+            break;
         }
-        return;
-    }
 
-    if (mPreviewMode) {
-        playPreviewNotesAtTick(mCurrentTick);
-    } else {
-        playNotesAtTick(mCurrentTick);
+        if (mPreviewMode) {
+            playPreviewNotesAtTick(mCurrentTick);
+        } else {
+            playNotesAtTick(mCurrentTick);
+        }
+        mCurrentTick++;
+        if (!mIsPlaying || mStage != Stage::Playing) break;
     }
-    mCurrentTick++;
 
     if (!mPreviewMode) mNoteBlockManager.tick();
 }
@@ -675,7 +677,7 @@ void NoteBotPlayer::playPreviewNotesAtTick(int tick) {
     if (!mSong) return;
 
     auto clientRef = ll::service::getClientInstance();
-    auto* client = clientRef.has_value() ? &clientRef.value() : nullptr;
+    auto* client = clientRef ? &*clientRef : nullptr;
     if (!client) return;
 
     auto& soundEngine = *client->getSoundEngine();
@@ -703,9 +705,9 @@ void NoteBotPlayer::playNotesAtTick(int tick) {
     if (mTickMappings.empty()) return;
 
     auto clientRef = ll::service::getClientInstance();
-    if (!clientRef.has_value()) return;
+    if (!clientRef) return;
 
-    auto& client = clientRef.value();
+    auto& client = *clientRef;
     auto* player = client.getLocalPlayer();
     if (!player) return;
 

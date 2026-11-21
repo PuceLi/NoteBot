@@ -354,15 +354,16 @@ void NotebotUi::drawModule() {
                 "Play songs with nearby note blocks");
             ImGui::TextUnformatted(description.c_str());
             const auto github = translate("notebot.ui.github", "GitHub");
-            ImGui::Text("%s: https://github.com/PuceLI/NoteBot", github.c_str());
+            ImGui::Text("%s: https://github.com/PuceLi/NoteBot", github.c_str());
             bool changed=false;
             const NotebotSettings defaults{};
             const auto general = translate("notebot.ui.general", "General");
             if (section(general.c_str(),generalExpanded_,width)) {
-                const auto tickDelay = translate("notebot.ui.tick_delay", "Tick Delay");
-                const auto tickDelayTip = translate("notebot.ui.tick_delay_tip",
-                    "Extra delay between song ticks (0 = fastest).");
-                changed |= intRow(tickDelay.c_str(),tickDelayTip.c_str(),settings.tickDelay,defaults.tickDelay,0,20,width);
+                const auto playbackSpeed = translate("notebot.ui.playback_speed", "Playback Speed");
+                const auto playbackSpeedTip = translate("notebot.ui.playback_speed_tip",
+                    "Playback speed during playing or previewing");
+                changed |= floatRow(playbackSpeed.c_str(),playbackSpeedTip.c_str(),settings.playbackSpeed,defaults.playbackSpeed,0.02f,2.0f,width);
+                settings.playbackSpeed = std::round(settings.playbackSpeed * 100.0f) / 100.0f;
                 const auto tuneInterval = translate("notebot.ui.tune_interval", "Tune Interval (ticks)");
                 const auto tuneIntervalTip = translate("notebot.ui.tune_interval_tip",
                     "Extra world ticks between confirmed tuning clicks (0 = fastest).");

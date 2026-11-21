@@ -11,7 +11,7 @@
 namespace meteor {
 
 struct NotebotSettings {
-    int tickDelay = 0;
+    float playbackSpeed = 1.0f;
     int tuneIntervalTicks = 0;
     int mode = 1;                       // 0 AnyInstrument, 1 ExactInstruments
     int playingMode = 1;                // 0 Sequential, 1 Polyphonic

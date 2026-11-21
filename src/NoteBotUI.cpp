@@ -174,7 +174,7 @@ void NoteBotUI::syncMeteorSettingsFromConfig() {
     const auto& config = mPlayer->getConfig();
     auto& settings = mMeteorUI->settings;
     mMeteorUI->showNowPlaying = config.showNowPlaying;
-    settings.tickDelay = config.tickDelay;
+    settings.playbackSpeed = config.playbackSpeed;
     settings.tuneIntervalTicks = config.tuneIntervalTicks;
     settings.mode = config.mode == NoteBotConfig::NotebotMode::Manual ? 1 : 0;
     settings.playingMode = static_cast<int>(config.playingMode);
@@ -207,7 +207,7 @@ void NoteBotUI::applyMeteorSettings() {
     if (!mPlayer || !mMeteorUI) return;
     const auto& settings = mMeteorUI->settings;
     auto& config = mPlayer->getConfig();
-    config.tickDelay = settings.tickDelay;
+    config.playbackSpeed = settings.playbackSpeed;
     config.tuneIntervalTicks = settings.tuneIntervalTicks;
     config.mode = settings.mode == 1 ? NoteBotConfig::NotebotMode::Manual
                                       : NoteBotConfig::NotebotMode::Auto;
@@ -338,10 +338,12 @@ void NoteBotUI::renderNowPlaying() {
         }
         const auto noSong = ui::translate("notebot.ui.no_song", "No song");
         const char* title = display.songTitle.empty() ? noSong.c_str() : display.songTitle.c_str();
+        const float titleX = titlePos.x + std::max(0.0f,
+            (ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(title).x) * 0.5f);
         const float titleY = titlePos.y + (ImGui::GetFrameHeight() - ImGui::GetTextLineHeight()) * 0.5f;
         ImGui::GetWindowDrawList()->PushClipRect(titlePos,
             ImVec2(titlePos.x + titleWidth, titlePos.y + ImGui::GetFrameHeight()), true);
-        ImGui::GetWindowDrawList()->AddText(ImVec2(titlePos.x, titleY),
+        ImGui::GetWindowDrawList()->AddText(ImVec2(titleX, titleY),
                                              ImGui::GetColorU32(ImGuiCol_Text), title);
         ImGui::GetWindowDrawList()->PopClipRect();
         if (editable) {
