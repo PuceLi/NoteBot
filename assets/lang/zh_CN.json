@@ -60,7 +60,7 @@
   "notebot.ui.render": "渲染",
   "notebot.ui.hide_now_playing": "隐藏 Now Playing 面板",
   "notebot.ui.show_now_playing": "显示 Now Playing 面板",
-  "notebot.ui.reset_now_playing": "重置当前播放面板位置",
+  "notebot.ui.reset_now_playing": "重置 Now Playing 位置",
   "notebot.ui.render_text": "显示音符盒音高",
   "notebot.ui.render_text_tip": "在音符盒上方显示音高",
   "notebot.ui.render_boxes": "显示轮廓",
