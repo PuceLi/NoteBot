@@ -370,6 +370,10 @@ void NotebotUi::drawModule() {
                 const auto tuneIntervalTip = translate("notebot.ui.tune_interval_tip",
                     "Extra world ticks between confirmed tuning clicks (0 = fastest).");
                 changed |= intRow(tuneInterval.c_str(),tuneIntervalTip.c_str(),settings.tuneIntervalTicks,defaults.tuneIntervalTicks,0,20,width);
+                const auto concurrentTune = translate("notebot.ui.concurrent_tune", "Concurrent Tune Blocks");
+                const auto concurrentTuneTip = translate("notebot.ui.concurrent_tune_tip",
+                    "Number of distinct note blocks adjusted simultaneously; overly high values may trigger anti-cheat.");
+                changed |= intRow(concurrentTune.c_str(),concurrentTuneTip.c_str(),settings.concurrentTuneBlocks,defaults.concurrentTuneBlocks,1,20,width);
                 const auto anyInstrument = translate("notebot.ui.mode_any_instrument", "AnyInstrument");
                 const auto exactInstruments = translate("notebot.ui.mode_exact_instruments", "ExactInstruments");
                 const char* modes[]={anyInstrument.c_str(),exactInstruments.c_str()};
@@ -451,6 +455,10 @@ void NotebotUi::drawModule() {
                 const auto throughWallsTip = translate("notebot.ui.render_through_walls_tip",
                     "Show note-block outlines and filled faces through walls");
                 changed |= boolRow(throughWalls.c_str(),throughWallsTip.c_str(),settings.renderBoxThroughWalls,defaults.renderBoxThroughWalls,width);
+                const auto hitFade = translate("notebot.ui.hit_fade", "Hit Fade Time (seconds)");
+                const auto hitFadeTip = translate("notebot.ui.hit_fade_tip",
+                    "Time for playback highlights to fade back to the normal block color");
+                changed |= floatRow(hitFade.c_str(),hitFadeTip.c_str(),settings.hitFadeSeconds,defaults.hitFadeSeconds,0.0f,5.0f,width);
                 const auto lines = translate("notebot.ui.lines", "Lines");
                 const auto sides = translate("notebot.ui.sides", "Sides");
                 const auto both = translate("notebot.ui.both", "Both");

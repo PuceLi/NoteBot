@@ -182,6 +182,7 @@ void NoteBotUI::syncMeteorSettingsFromConfig() {
     mMeteorUI->showNowPlaying = config.showNowPlaying;
     settings.playbackSpeed = config.playbackSpeed;
     settings.tuneIntervalTicks = config.tuneIntervalTicks;
+    settings.concurrentTuneBlocks = config.concurrentTuneBlocks;
     settings.mode = config.mode == NoteBotConfig::NotebotMode::Manual ? 1 : 0;
     settings.playingMode = static_cast<int>(config.playingMode);
     settings.noteMap = config.noteMap;
@@ -199,6 +200,7 @@ void NoteBotUI::syncMeteorSettingsFromConfig() {
     settings.noteTextScale = config.noteTextScale;
     settings.noteTextHeight = config.noteTextHeight;
     settings.boxExpansion = config.boxExpansion;
+    settings.hitFadeSeconds = config.hitFadeSeconds;
     settings.showScannedNoteblocks = config.showUnmappedBoxes;
     settings.renderColors = {{
         config.colors.untunedSide, config.colors.untunedLine,
@@ -216,6 +218,7 @@ void NoteBotUI::applyMeteorSettings() {
     auto& config = mPlayer->getConfig();
     config.playbackSpeed = settings.playbackSpeed;
     config.tuneIntervalTicks = settings.tuneIntervalTicks;
+    config.concurrentTuneBlocks = settings.concurrentTuneBlocks;
     config.mode = settings.mode == 1 ? NoteBotConfig::NotebotMode::Manual
                                       : NoteBotConfig::NotebotMode::Auto;
     config.playingMode = static_cast<NoteBotConfig::PlayingMode>(settings.playingMode);
@@ -234,6 +237,7 @@ void NoteBotUI::applyMeteorSettings() {
     config.noteTextScale = settings.noteTextScale;
     config.noteTextHeight = settings.noteTextHeight;
     config.boxExpansion = settings.boxExpansion;
+    config.hitFadeSeconds = settings.hitFadeSeconds;
     config.showUnmappedBoxes = settings.showScannedNoteblocks;
     config.colors.untunedSide = settings.renderColors[0];
     config.colors.untunedLine = settings.renderColors[1];

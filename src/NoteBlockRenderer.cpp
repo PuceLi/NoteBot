@@ -26,6 +26,7 @@
 #include <array>
 #include <algorithm>
 #include <cfloat>
+#include <chrono>
 #include <cmath>
 #include <mutex>
 #include <optional>
@@ -61,6 +62,29 @@ struct WorldOverlayState {
 std::mutex outlineMutex;
 WorldOverlayState worldOverlay;
 
+std::array<float, 4> playbackColor(const std::array<float, 4>& base,
+                                 const std::array<float, 4>& highlight,
+                                 const std::optional<std::chrono::steady_clock::time_point>& lastPlayed,
+                                 std::chrono::steady_clock::time_point now, float fadeSeconds) {
+    if (!lastPlayed) return base;
+    const float elapsed = std::chrono::duration<float>(now - *lastPlayed).count();
+    if (fadeSeconds <= 0.0f) return elapsed < 0.5f ? highlight : base;
+    const float progress = std::clamp(elapsed / fadeSeconds, 0.0f, 1.0f);
+    if (progress <= 0.0f) return highlight;
+    if (progress >= 1.0f) return base;
+    const float weight = 1.0f - progress * progress * (3.0f - 2.0f * progress);
+    // Interpolate premultiplied colors so invisible RGB cannot tint the fade.
+    const float baseAlpha = base[3] * (1.0f - weight);
+    const float hitAlpha = highlight[3] * weight;
+    const float alpha = baseAlpha + hitAlpha;
+    if (alpha <= 0.0f) return base;
+    std::array<float, 4> color;
+    color[3] = alpha;
+    for (size_t channel = 0; channel < 3; ++channel)
+        color[channel] = (base[channel] * baseAlpha + highlight[channel] * hitAlpha) / alpha;
+    return color;
+}
+
 bool isGameplayScreen() {
     auto clientRef = ll::service::getClientInstance();
     return clientRef.has_value() && clientRef.value().getLocalPlayer() &&
@@ -93,6 +117,23 @@ void clearOverlayMeshCache() {
     overlayMeshCache.lines.reset();
     overlayMeshCache.faceVertices = overlayMeshCache.lineVertices = 0;
     overlayMeshCache.revision = ~uint64_t{0};
+}
+
+void appendOutlineFace(Tessellator& batch, const std::array<glm::vec3, 4>& face) {
+    constexpr float width = 0.008f;
+    const glm::vec3 u = glm::normalize(face[1] - face[0]) * width;
+    const glm::vec3 v = glm::normalize(face[3] - face[0]) * width;
+    // Four non-overlapping borders, with the same winding as the filled faces.
+    const std::array<std::array<glm::vec3, 4>, 4> strips{{
+        {{face[0], face[1], face[1] + v, face[0] + v}},
+        {{face[3] - v, face[2] - v, face[2], face[3]}},
+        {{face[0] + v, face[0] + u + v, face[3] + u - v, face[3] - v}},
+        {{face[1] - u + v, face[1] + v, face[2] - v, face[2] - u - v}}
+    }};
+    for (const auto& strip : strips) {
+        for (auto point = strip.rbegin(); point != strip.rend(); ++point)
+            batch.vertex(point->x, point->y, point->z);
+    }
 }
 
 void buildOverlayMesh(ScreenContext& screen, const WorldOverlayState& overlay, OverlayMeshCache& cache) {
@@ -153,22 +194,28 @@ void buildOverlayMesh(ScreenContext& screen, const WorldOverlayState& overlay, O
     if (overlay.drawLines && std::any_of(overlay.blocks.begin(), overlay.blocks.end(),
                                          [](const WorldOutline& block) { return block.lineColor[3] > 0.0f; })) {
         Tessellator batch(screen.tessellator.mBufferResourceService);
-        batch.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(overlay.blocks.size() * 24), false);
+        constexpr int verticesPerBlock = 6 * 4 * 4;
+        batch.begin({}, mce::PrimitiveMode::QuadList,
+                    static_cast<int>(overlay.blocks.size() * verticesPerBlock), false);
+        static constexpr std::array<std::array<int, 4>, 6> faces{{
+            {{0, 2, 6, 4}}, {{1, 5, 7, 3}}, {{0, 4, 5, 1}},
+            {{2, 3, 7, 6}}, {{0, 1, 3, 2}}, {{4, 6, 7, 5}}
+        }};
         for (const auto& block : overlay.blocks) {
             const auto& color = block.lineColor;
             if (color[3] <= 0.0f) continue;
             batch.color(color[0], color[1], color[2], color[3]);
+            std::array<glm::vec3, 8> corners;
             for (int corner = 0; corner < 8; ++corner) {
-                for (int axis = 0; axis < 3; ++axis) {
-                    if (corner & (1 << axis)) continue;
-                    vertex(batch, block.pos, corner);
-                    vertex(batch, block.pos, corner | (1 << axis));
-                }
+                corners[corner] = glm::vec3{
+                    float(block.pos.x - cache.origin.x) + ((corner & 1) ? 1.0f + expansion : -expansion),
+                    float(block.pos.y - cache.origin.y) + ((corner & 2) ? 1.0f + expansion : -expansion),
+                    float(block.pos.z - cache.origin.z) + ((corner & 4) ? 1.0f + expansion : -expansion)};
             }
+            for (const auto& face : faces)
+                appendOutlineFace(batch, {corners[face[0]], corners[face[1]], corners[face[2]], corners[face[3]]});
+            cache.lineVertices += verticesPerBlock;
         }
-        cache.lineVertices = static_cast<uint32_t>(
-            std::count_if(overlay.blocks.begin(), overlay.blocks.end(),
-                          [](const WorldOutline& block) { return block.lineColor[3] > 0.0f; }) * 24);
         cache.lines.emplace(batch.end(Tessellator::UploadMode::Buffered, "NoteBot block outlines",
                                       SupplementaryFieldAutoGenerationMode{}));
     }
@@ -202,7 +249,6 @@ void renderWorldBoxes(BaseActorRenderContext& context) {
     if (!faceMaterial.mRenderMaterialInfoPtr) {
         faceMaterial = mce::MaterialPtr(mce::RenderMaterialGroup::common(), HashedString{"lightning"});
     }
-    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
 
     const Vec3 camera = context.mImpl->mCameraPosition;
     auto ref = screen.camera.worldMatrixStack->push(false);
@@ -217,8 +263,8 @@ void renderWorldBoxes(BaseActorRenderContext& context) {
         cache.faces->renderMesh(screen, faceMaterial, gsl::span<mce::ClientTexture const*>{}, 0,
                                 cache.faceVertices, OffscreenCaptureDescription{}, nullptr);
     }
-    if (cache.lines && lineMaterial.mRenderMaterialInfoPtr) {
-        cache.lines->renderMesh(screen, lineMaterial, gsl::span<mce::ClientTexture const*>{}, 0,
+    if (cache.lines && faceMaterial.mRenderMaterialInfoPtr) {
+        cache.lines->renderMesh(screen, faceMaterial, gsl::span<mce::ClientTexture const*>{}, 0,
                                 cache.lineVertices, OffscreenCaptureDescription{}, nullptr);
     }
     ref.stack->_isDirty = true;
@@ -307,6 +353,7 @@ void NoteBlockRenderer::render(const NoteBlockManager& manager, const NoteBotCon
     const auto snapshot = manager.getRenderSnapshot();
     const auto& noteBlocks = snapshot.noteBlocks;
     const auto& targetPitches = snapshot.targetPitches;
+    const auto now = std::chrono::steady_clock::now();
 
     WorldOverlayState overlay;
     overlay.throughWalls = config.renderBoxThroughWalls;
@@ -318,14 +365,16 @@ void NoteBlockRenderer::render(const NoteBlockManager& manager, const NoteBotCon
         for (const auto& block : noteBlocks) {
             const auto target = targetPitches.find(block.pos);
             if (target == targetPitches.end() && !config.showUnmappedBoxes) continue;
-            const auto& sideColor = target == targetPitches.end() ? config.colors.scannedSide
-                : block.isHit ? (playing ? config.colors.playingSide : config.colors.tuneHitSide)
+            const auto& baseSide = target == targetPitches.end() ? config.colors.scannedSide
+                : block.isHit && !playing && !block.lastPlayed ? config.colors.tuneHitSide
                 : block.pitch == target->second ? config.colors.tunedSide
                 : config.colors.untunedSide;
-            const auto& lineColor = target == targetPitches.end() ? config.colors.scannedLine
-                : block.isHit ? (playing ? config.colors.playingLine : config.colors.tuneHitLine)
+            const auto& baseLine = target == targetPitches.end() ? config.colors.scannedLine
+                : block.isHit && !playing && !block.lastPlayed ? config.colors.tuneHitLine
                 : block.pitch == target->second ? config.colors.tunedLine
                 : config.colors.untunedLine;
+            const auto sideColor = playbackColor(baseSide, config.colors.playingSide, block.lastPlayed, now, config.hitFadeSeconds);
+            const auto lineColor = playbackColor(baseLine, config.colors.playingLine, block.lastPlayed, now, config.hitFadeSeconds);
             overlay.blocks.push_back({block.pos, sideColor, lineColor});
         }
     }

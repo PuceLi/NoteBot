@@ -13,6 +13,7 @@ namespace meteor {
 struct NotebotSettings {
     float playbackSpeed = 1.0f;
     int tuneIntervalTicks = 0;
+    int concurrentTuneBlocks = 1;
     int mode = 1;                       // 0 AnyInstrument, 1 ExactInstruments
     int playingMode = 1;                // 0 Sequential, 1 Polyphonic
     bool polyphonic = true;
@@ -38,6 +39,7 @@ struct NotebotSettings {
     float noteTextScale = 1.0f;
     float noteTextHeight = 1.3f;
     float boxExpansion = 0.0f;
+    float hitFadeSeconds = 0.5f;
     bool showScannedNoteblocks = false;
 };
 

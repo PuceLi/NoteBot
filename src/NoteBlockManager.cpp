@@ -182,12 +182,14 @@ void NoteBlockManager::tick() {
     }
 }
 
-void NoteBlockManager::markNoteBlockHit(const BlockPos& pos) {
+void NoteBlockManager::markNoteBlockHit(const BlockPos& pos, bool playback) {
     std::lock_guard lock(mMutex);
     for (auto& block : mNoteBlocks) {
         if (block.pos == pos) {
             block.isHit = true;
             block.hitTimer = 10;
+            if (playback) block.lastPlayed = std::chrono::steady_clock::now();
+            else block.lastPlayed.reset();
             break;
         }
     }

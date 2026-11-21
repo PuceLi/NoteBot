@@ -186,9 +186,6 @@ void NoteBotPlayer::stopInternal() {
     mNextPitchRefreshTime = {};
     mStage = Stage::Ready;
     mTuneTargets.clear();
-    mAwaitingTuneUpdate = false;
-    mTuneDelay = 0;
-    mTuneRetryCount = 0;
     mError.clear();
     mSongWarning.clear();
     mWorldPaused.store(false, std::memory_order_release);
@@ -256,9 +253,6 @@ void NoteBotPlayer::reset() {
     mAutoRefreshNearby = false;
     mNoteBlockManager.clear();
     mTuneTargets.clear();
-    mAwaitingTuneUpdate = false;
-    mTuneDelay = 0;
-    mTuneRetryCount = 0;
     mStage = Stage::Ready;
     mError.clear();
     mSongWarning.clear();
@@ -280,9 +274,6 @@ void NoteBotPlayer::prepareTuneTargets() {
     mTuneIndex = 0;
     mTunePasses = 0;
     mTunePlanReady = false;
-    mAwaitingTuneUpdate = false;
-    mTuneDelay = 0;
-    mTuneRetryCount = 0;
     mIsPlaying = false;
     mError.clear();
     mStage = Stage::Tuning;
@@ -325,20 +316,22 @@ bool NoteBotPlayer::updateTuneTargets() {
 }
 
 void NoteBotPlayer::tickTuning() {
-    if (mAwaitingTuneUpdate) {
-        auto clientRef = ll::service::getClientInstance();
-        auto* player = clientRef ? clientRef->getLocalPlayer() : nullptr;
-        if (!player) {
-            mStage = Stage::Error;
-            mError = ui::translate("notebot.error.no_player_verifying",
-                "No local player while verifying tuning");
-            return;
-        }
-        int pitch = NoteBlockInteraction::getNoteBlockPitch(
-            player->getDimensionBlockSource(), mTuneTargets[mTuneIndex].pos);
-        if (pitch == mTunePitchBefore) {
+    auto clientRef = ll::service::getClientInstance();
+    auto* player = clientRef ? clientRef->getLocalPlayer() : nullptr;
+    if (!player) {
+        mStage = Stage::Error;
+        mError = ui::translate("notebot.error.no_player_tuning", "No local player for tuning");
+        return;
+    }
+    auto& blockSource = player->getDimensionBlockSource();
+
+    // Each block has its own acknowledgement, cooldown and retry state.
+    for (auto& target : mTuneTargets) {
+        if (!target.awaitingUpdate) continue;
+        int pitch = NoteBlockInteraction::getNoteBlockPitch(blockSource, target.pos);
+        if (pitch == target.pitchBefore) {
             if (const auto eventPitch = NoteBlockInteraction::noteEventPitch(
-                    mTuneTargets[mTuneIndex].pos, mTuneEventSerialBefore)) {
+                    target.pos, target.eventSerialBefore)) {
                 pitch = *eventPitch;
             }
         }
@@ -347,33 +340,33 @@ void NoteBotPlayer::tickTuning() {
             mError = ui::translate("notebot.error.block_disappeared", "Note block disappeared while tuning");
             return;
         }
-        if (pitch == mTunePitchBefore) {
-            if (++mTuneVerifyTicks >= 40) {
-                if (mTuneRetryCount++ < 2) {
-                    mAwaitingTuneUpdate = false;
-                    mTuneDelay = 1;
-                    return;
+        if (pitch == target.pitchBefore) {
+            if (++target.verifyTicks >= 40) {
+                if (target.retryCount++ < 2) {
+                    target.awaitingUpdate = false;
+                    target.delay = 1;
+                    continue;
                 }
                 mStage = Stage::Error;
-                const auto& pos = mTuneTargets[mTuneIndex].pos;
+                const auto& pos = target.pos;
                 const auto delta = pos.center() - player->getPosition();
                 const auto distance = std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
                 mError = ui::format("notebot.error.tuning_ignored",
                     "Tuning ignored at ({0},{1},{2}), distance {3}, event {4}",
                     pos.x, pos.y, pos.z, distance,
-                    NoteBlockInteraction::noteEventPitch(pos, mTuneEventSerialBefore)
+                    NoteBlockInteraction::noteEventPitch(pos, target.eventSerialBefore)
                         ? ui::translate("notebot.status.event_unchanged", "unchanged")
                         : ui::translate("notebot.status.event_none", "none"));
+                return;
             }
-            return;
+            continue;
         }
-        mTuneTargets[mTuneIndex].remainingHits =
-            (mTuneTargets[mTuneIndex].targetPitch - pitch + 25) % 25;
-        mTuneRetryCount = 0;
-        mNoteBlockManager.updateNoteBlockPitch(mTuneTargets[mTuneIndex].pos, pitch);
-        mNoteBlockManager.markNoteBlockHit(mTuneTargets[mTuneIndex].pos);
-        mAwaitingTuneUpdate = false;
-        mTuneDelay = mConfig.tuneIntervalTicks;
+        target.remainingHits = (target.targetPitch - pitch + 25) % 25;
+        target.retryCount = 0;
+        mNoteBlockManager.updateNoteBlockPitch(target.pos, pitch);
+        mNoteBlockManager.markNoteBlockHit(target.pos);
+        target.awaitingUpdate = false;
+        target.delay = mConfig.tuneIntervalTicks;
     }
 
     if (mStage == Stage::Verifying) {
@@ -386,9 +379,7 @@ void NoteBotPlayer::tickTuning() {
         const bool done = std::all_of(mTuneTargets.begin(), mTuneTargets.end(),
                                      [](const TuneTarget& target) { return target.remainingHits == 0; });
         if (done) {
-            auto clientRef = ll::service::getClientInstance();
-            auto* player = clientRef ? clientRef->getLocalPlayer() : nullptr;
-            if (player && player->getPlayerGameType() == GameType::Survival) {
+            if (player->getPlayerGameType() == GameType::Survival) {
                 mStage = Stage::Playing;
                 mIsPlaying = true;
             } else {
@@ -407,11 +398,6 @@ void NoteBotPlayer::tickTuning() {
         mStage = Stage::Tuning;
     }
 
-    if (mTuneDelay > 0) {
-        --mTuneDelay;
-        return;
-    }
-
     if (!mTunePlanReady) {
         if (!updateTuneTargets()) {
             mStage = Stage::Error;
@@ -419,21 +405,42 @@ void NoteBotPlayer::tickTuning() {
         }
         mTunePlanReady = true;
     }
-    auto clientRef = ll::service::getClientInstance();
-    auto* player = clientRef ? clientRef->getLocalPlayer() : nullptr;
-    if (!player) {
-        mStage = Stage::Error;
-        mError = ui::translate("notebot.error.no_player_tuning", "No local player for tuning");
-        return;
-    }
-    auto& blockSource = player->getDimensionBlockSource();
-    while (mTuneIndex < mTuneTargets.size()) {
-        auto& target = mTuneTargets[mTuneIndex];
+    const int limit = std::clamp(mConfig.concurrentTuneBlocks, 1, 20);
+    int pending = static_cast<int>(std::count_if(mTuneTargets.begin(), mTuneTargets.end(),
+        [](const TuneTarget& target) { return target.awaitingUpdate; }));
+    bool rotationSet = false;
+    for (auto& target : mTuneTargets) {
+        if (target.awaitingUpdate || target.remainingHits == 0) continue;
+        if (target.delay > 0) {
+            --target.delay;
+            continue;
+        }
+        if (pending >= limit) continue;
         if (!refreshTuneTarget(target, blockSource)) {
             mStage = Stage::Error;
             return;
         }
-        if (target.remainingHits != 0) break;
+        if (target.remainingHits == 0) continue;
+        target.pitchBefore = mNoteBlockManager.getCachedPitch(target.pos);
+        target.eventSerialBefore = NoteBlockInteraction::noteEventSerial();
+        if (mConfig.autoRotate && !rotationSet) {
+            const auto rotation = NoteBlockInteraction::calculateRotation(player->getPosition(), target.pos);
+            NoteBlockInteraction::setRenderRotation(player, rotation);
+            rotationSet = true;
+        }
+        if (!NoteBlockInteraction::tuneNoteBlock(player, target.pos, false)) {
+            mStage = Stage::Error;
+            mError = ui::translate("notebot.error.tuning_interaction",
+                "Could not interact with a note block for tuning");
+            return;
+        }
+        target.awaitingUpdate = true;
+        target.verifyTicks = 0;
+        ++pending;
+    }
+    mTuneIndex = 0;
+    while (mTuneIndex < mTuneTargets.size() && mTuneTargets[mTuneIndex].remainingHits == 0 &&
+           !mTuneTargets[mTuneIndex].awaitingUpdate) {
         ++mTuneIndex;
     }
     if (mTuneIndex == mTuneTargets.size()) {
@@ -442,22 +449,6 @@ void NoteBotPlayer::tickTuning() {
         return;
     }
 
-    mTunePitchBefore = mNoteBlockManager.getCachedPitch(mTuneTargets[mTuneIndex].pos);
-    mTuneEventSerialBefore = NoteBlockInteraction::noteEventSerial();
-    if (mConfig.autoRotate) {
-        const auto rotation = NoteBlockInteraction::calculateRotation(
-            player->getPosition(), mTuneTargets[mTuneIndex].pos);
-        NoteBlockInteraction::setRenderRotation(player, rotation);
-    }
-    if (mTunePitchBefore < 0 ||
-        !NoteBlockInteraction::tuneNoteBlock(player, mTuneTargets[mTuneIndex].pos, false)) {
-        mStage = Stage::Error;
-        mError = ui::translate("notebot.error.tuning_interaction",
-            "Could not interact with a note block for tuning");
-        return;
-    }
-    mAwaitingTuneUpdate = true;
-    mTuneVerifyTicks = 0;
 }
 
 void NoteBotPlayer::tick() {
@@ -741,7 +732,7 @@ void NoteBotPlayer::playNotesAtTick(int tick) {
         }
         if (!NoteBlockInteraction::playNoteBlock(player, pos, mConfig.swingArm)) continue;
 
-        mNoteBlockManager.markNoteBlockHit(pos);
+        mNoteBlockManager.markNoteBlockHit(pos, true);
     }
 }
 

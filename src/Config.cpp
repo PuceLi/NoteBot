@@ -87,11 +87,13 @@ bool sanitizeConfig(NoteBotConfig& cfg) {
     clampInt(cfg.checkNoteblocksDelay, 1, 100);
     clampFloat(cfg.playbackSpeed, 0.02f, 2.0f, defaults.playbackSpeed);
     clampInt(cfg.tuneIntervalTicks, 0, 20);
+    clampInt(cfg.concurrentTuneBlocks, 1, 20);
     clampInt(cfg.keybinds.hotkey, 0, 255);
     clampInt(cfg.keybinds.playPause, 0, 255);
     clampFloat(cfg.noteTextScale, 0.5f, 3.0f, defaults.noteTextScale);
     clampFloat(cfg.noteTextHeight, 0.5f, 2.5f, defaults.noteTextHeight);
     clampFloat(cfg.boxExpansion, 0.0f, 0.08f, defaults.boxExpansion);
+    clampFloat(cfg.hitFadeSeconds, 0.0f, 5.0f, defaults.hitFadeSeconds);
 
     clampColor(cfg.colors.scannedSide, defaults.colors.scannedSide);
     clampColor(cfg.colors.scannedLine, defaults.colors.scannedLine);
@@ -139,7 +141,6 @@ void loadConfig() {
                     const auto version = data.find("version");
                     sourceVersion = version != data.end() && version->is_number_integer()
                         ? version->template get<int>() : 0;
-                    data.erase("concurrentTuneBlocks");
                     return ll::config::defaultConfigUpdater(defaults, data);
                 });
             if (!currentVersion && !updaterCalled) {

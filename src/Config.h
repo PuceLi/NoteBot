@@ -32,7 +32,7 @@ struct KeybindsConfig {
 };
 
 struct NoteBotConfig {
-    int version = 12;
+    int version = 14;
 
     enum class NotebotMode {
         Manual = 0,
@@ -60,10 +60,12 @@ struct NoteBotConfig {
     float noteTextScale = 1.0f;
     float noteTextHeight = 1.3f;
     float boxExpansion = 0.0f;
+    float hitFadeSeconds = 0.5f;
 
     // 播放配置
     float playbackSpeed = 1.0f;
     int tuneIntervalTicks = 0;
+    int concurrentTuneBlocks = 1;
     bool polyphonic = true;
     bool autoRotate = true;
     bool autoPlay = false;

@@ -72,6 +72,12 @@ private:
         BlockPos pos;
         int targetPitch;
         int remainingHits;
+        bool awaitingUpdate = false;
+        int pitchBefore = -1;
+        uint64_t eventSerialBefore = 0;
+        int verifyTicks = 0;
+        int delay = 0;
+        int retryCount = 0;
     };
     enum class Stage { Ready, Tuning, Verifying, Playing, Error };
     enum class ControlRequest { None, Play, Pause, Stop };
@@ -113,12 +119,6 @@ private:
     int mVerifyDelay = 0;
     int mTunePasses = 0;
     bool mTunePlanReady = false;
-    bool mAwaitingTuneUpdate = false;
-    int mTunePitchBefore = -1;
-    uint64_t mTuneEventSerialBefore = 0;
-    int mTuneVerifyTicks = 0;
-    int mTuneDelay = 0;
-    int mTuneRetryCount = 0;
     std::string mError;
     std::string mSongWarning;
 

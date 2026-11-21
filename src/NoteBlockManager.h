@@ -5,6 +5,7 @@
 #include "mc/world/level/BlockSource.h"
 
 #include <vector>
+#include <chrono>
 #include <unordered_map>
 #include <optional>
 #include <mutex>
@@ -25,6 +26,7 @@ struct NoteBlockInfo {
     bool     isHit   = false;
     int      hitTimer = 0;
     bool     awaitingActorSync = false;
+    std::optional<std::chrono::steady_clock::time_point> lastPlayed;
 };
 
 class NoteBlockManager {
@@ -39,7 +41,7 @@ public:
 
     void tick();
     void refreshPitches(BlockSource& blockSource);
-    void markNoteBlockHit(const BlockPos& pos);
+    void markNoteBlockHit(const BlockPos& pos, bool playback = false);
     void updateNoteBlockPitch(const BlockPos& pos, int pitch);
     int getCachedPitch(const BlockPos& pos) const;
 

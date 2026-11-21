@@ -40,6 +40,8 @@ Make sure the **LeviLamina** dependency is installed.
 
 You can also click **Scan Note Blocks** first to verify nearby block matching. The song status will display the number of available note blocks and any missing notes; expand **Missing Notes** to view the specific missing pitches.
 
+Under **General**, **Concurrent Tune Blocks** controls how many different note blocks can be tuned at once (1–20, default 1). Each block waits for its pitch update before being clicked again; **Tune Interval** applies separately to each block.
+
 ### Previewing Songs
 
 Click **Play** directly in the song list to preview a song without needing to enter a world.
