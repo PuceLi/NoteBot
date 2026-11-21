@@ -19,6 +19,7 @@ public:
     struct DisplayState {
         bool hasSong = false;
         bool isPlaying = false;
+        bool isPaused = false;
         bool isPreview = false;
         int currentTick = 0;
         int totalTicks = 0;

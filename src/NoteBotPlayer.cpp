@@ -786,6 +786,7 @@ void NoteBotPlayer::publishDisplayState() {
     std::lock_guard lock(mDisplayMutex);
     mPublishedDisplay.hasSong = mSong.has_value();
     mPublishedDisplay.isPlaying = mIsPlaying;
+    mPublishedDisplay.isPaused = mStage == Stage::Playing && !mIsPlaying;
     mPublishedDisplay.isPreview = mPreviewMode;
     mPublishedDisplay.currentTick = mCurrentTick;
     if (mSong) {

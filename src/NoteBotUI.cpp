@@ -311,8 +311,9 @@ void NoteBotUI::render() {
 }
 
 void NoteBotUI::renderNowPlaying() {
-    if (!mPlayer->getConfig().showNowPlaying || (!mPlayer->isPlaying() && !isVisible())) return;
+    if (!mPlayer->getConfig().showNowPlaying) return;
     const auto display = mPlayer->getDisplayState();
+    if (!display.isPlaying && !display.isPaused && !isVisible()) return;
     const auto* viewport = ImGui::GetMainViewport();
     const auto defaultPosition = ImVec2(viewport->GetCenter().x, viewport->Pos.y + 72.0f);
     if (mResetNowPlayingRequested) {
