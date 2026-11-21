@@ -167,6 +167,12 @@ void NoteBotPlayer::pause() {
     mPendingControl.store(ControlRequest::Pause, std::memory_order_release);
 }
 
+void NoteBotPlayer::togglePlayback() {
+    const auto state = getDisplayState();
+    if (!state.hasSong) return;
+    if (state.isPlaying) pause(); else play();
+}
+
 void NoteBotPlayer::stop() {
     mPendingControl.store(ControlRequest::Stop, std::memory_order_release);
 }

@@ -18,6 +18,9 @@ public:
     void toggle();
     void setVisible(bool visible);
     bool isVisible() const { return mVisible.load(std::memory_order_acquire); }
+    bool isCapturingKeyboard() const {
+        return isVisible() && mCapturingKeyboard.load(std::memory_order_acquire);
+    }
 
     void setPlayer(NoteBotPlayer* player);
     void setIconTextures(std::uintptr_t reset, std::uintptr_t copy, std::uintptr_t paste);
@@ -25,6 +28,7 @@ public:
 private:
     std::atomic<bool> mVisible{false};
     std::atomic<bool> mOpenModuleRequested{false};
+    std::atomic<bool> mCapturingKeyboard{false};
     NoteBotPlayer*  mPlayer  = nullptr;
     std::unique_ptr<meteor::NotebotUi> mMeteorUI;
     bool            mConfigDirty = false;

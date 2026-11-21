@@ -88,6 +88,7 @@ bool sanitizeConfig(NoteBotConfig& cfg) {
     clampFloat(cfg.playbackSpeed, 0.02f, 2.0f, defaults.playbackSpeed);
     clampInt(cfg.tuneIntervalTicks, 0, 20);
     clampInt(cfg.keybinds.hotkey, 0, 255);
+    clampInt(cfg.keybinds.playPause, 0, 255);
     clampFloat(cfg.noteTextScale, 0.5f, 3.0f, defaults.noteTextScale);
     clampFloat(cfg.noteTextHeight, 0.5f, 2.5f, defaults.noteTextHeight);
     clampFloat(cfg.boxExpansion, 0.0f, 0.08f, defaults.boxExpansion);

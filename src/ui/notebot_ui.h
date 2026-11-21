@@ -51,6 +51,7 @@ struct NotebotActions {
     std::function<void()> scanNoteBlocks;
     std::function<void()> clearNoteBlocks;
     std::function<void(const std::string&)> bindChanged;
+    std::function<void(const std::string&)> playbackBindChanged;
     std::function<void(const NotebotSettings&)> settingsChanged;
     std::function<void(const NotebotSettings&)> animatedColorsChanged;
 };
@@ -71,6 +72,7 @@ public:
     bool playing = false;
     bool showNowPlaying = true;
     std::string keybind = "None";
+    std::string playbackKeybind = "P";
     bool showSongs = false;
     bool showModule = true;
     std::uintptr_t resetIcon = 0;
@@ -81,6 +83,7 @@ public:
     void updateRainbowColors();
     std::string getStatus() const;
     void refreshSongs();
+    bool isBindingKey() const { return binding_ != BindTarget::None; }
 
 private:
     std::filesystem::path songsDirectory_;
@@ -100,7 +103,8 @@ private:
     bool noteMapExpanded_ = false;
     bool renderExpanded_ = true;
     bool bindExpanded_ = true;
-    bool binding_ = false;
+    enum class BindTarget { None, Interface, Playback };
+    BindTarget binding_ = BindTarget::None;
     int editingColor_ = -1;
     bool colorExpanded_ = true;
     bool colorLayoutLoaded_ = false;

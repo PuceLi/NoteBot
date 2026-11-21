@@ -27,6 +27,7 @@
 #include "mc/network/packet/PlayerAuthInputPacket.h"
 
 #include <imgui.h>
+#include <array>
 #include <variant>
 
 namespace notebot {
@@ -42,6 +43,7 @@ static ll::event::ListenerPtr keyListener;
 static ll::event::ListenerPtr mouseListener;
 static std::atomic<bool> uiMouseActive{false};
 static std::atomic<bool> restoreGameMouse{false};
+static std::array<bool, 256> pressedKeys{};
 
 static std::optional<NoteBlockInteraction::ModelRotation> getAutoRotatePose(LocalPlayer* player) {
     if (!gPlayer || !gPlayer->getConfig().autoRotate || !player) return std::nullopt;
@@ -84,11 +86,21 @@ void installInputHooks() {
 
     keyListener = bus.emplaceListener<ll::event::input::KeyInputEvent>([](ll::event::KeyInputEvent& event) {
         auto& logger = NoteBot::getInstance().getSelf().getLogger();
+        const int key = event.keyCode();
+        if (key <= 0 || key >= static_cast<int>(pressedKeys.size())) return;
+        const bool repeated = pressedKeys[key];
+        pressedKeys[key] = event.isDown();
         if (!event.isDown()) return;
         if (event.controller().mTextboxIsFocused || event.controller().mTextboxIsSelected) return;
+        if (gUI && gUI->isCapturingKeyboard()) {
+            event.cancel();
+            return;
+        }
 
         auto& cfg = getConfig();
         if (event.keyCode() == cfg.keybinds.hotkey) {
+            event.cancel();
+            if (repeated) return;
             logger.info("Hotkey pressed (0x{:X}), toggling UI", event.keyCode());
             if (gUI) {
                 gUI->toggle();
@@ -97,7 +109,13 @@ void installInputHooks() {
             } else {
                 logger.warn("gUI is null");
             }
+            return;
+        }
+
+        if (event.keyCode() == cfg.keybinds.playPause) {
             event.cancel();
+            if (!repeated && gPlayer) gPlayer->togglePlayback();
+            return;
         }
 
         if (gUI && gUI->isVisible() && event.keyCode() == 0x1B) {
@@ -114,6 +132,7 @@ void installInputHooks() {
 
 void uninstallInputHooks() {
     unregisterGameplayHooks();
+    pressedKeys.fill(false);
     if (gUI) gUI->setVisible(false);
     if (auto client = ll::service::getClientInstance()) syncUiMouse(*client);
     if (keyListener) {

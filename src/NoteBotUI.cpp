@@ -118,14 +118,11 @@ void NoteBotUI::setPlayer(NoteBotPlayer* player) {
     if (!mMeteorUI || !mPlayer) return;
     syncMeteorSettingsFromConfig();
     mMeteorUI->keybind = keyNameFromCode(mPlayer->getConfig().keybinds.hotkey);
+    mMeteorUI->playbackKeybind = keyNameFromCode(mPlayer->getConfig().keybinds.playPause);
     auto& actions = mMeteorUI->actions;
     actions.loadSong = [this](const fs::path& path) { mPlayer->loadSong(path); };
     actions.previewSong = [this](const fs::path& path) { mPlayer->previewSong(path); };
-    actions.pauseResume = [this] {
-        const auto state = mPlayer->getDisplayState();
-        if (!state.hasSong) return;
-        if (state.isPlaying) mPlayer->pause(); else mPlayer->play();
-    };
+    actions.pauseResume = [this] { mPlayer->togglePlayback(); };
     actions.stop = [this] { mPlayer->stop(); };
     actions.scanNoteBlocks = [this] {
         mPlayer->requestScanNearbyNoteBlocks(mPlayer->getConfig().general.scanRadius);
@@ -165,6 +162,15 @@ void NoteBotUI::setPlayer(NoteBotPlayer* player) {
             return;
         }
         mPlayer->getConfig().keybinds.hotkey = code;
+        markConfigEdited();
+    };
+    actions.playbackBindChanged = [this](const std::string& name) {
+        const int code = keyCodeFromName(name);
+        if (code < 0) {
+            mMeteorUI->playbackKeybind = keyNameFromCode(mPlayer->getConfig().keybinds.playPause);
+            return;
+        }
+        mPlayer->getConfig().keybinds.playPause = code;
         markConfigEdited();
     };
 }
@@ -290,6 +296,8 @@ void NoteBotUI::render() {
     if (mPlayer) renderNowPlaying();
     if (isVisible() && clickedOutsideImGui())
         setVisible(false);
+    mCapturingKeyboard.store(isVisible() && mMeteorUI &&
+        (mMeteorUI->isBindingKey() || ImGui::GetIO().WantTextInput), std::memory_order_release);
     if (mConfigDirty && std::chrono::steady_clock::now() - mLastConfigEdit >=
                             std::chrono::milliseconds(750)) {
         try {

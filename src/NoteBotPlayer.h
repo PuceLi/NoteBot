@@ -34,6 +34,7 @@ public:
     bool previewSong(const std::filesystem::path& filePath);
     void play();
     void pause();
+    void togglePlayback();
     void stop();
     void requestClearNoteBlocks() noexcept {
         mPendingScanRadius.store(-1, std::memory_order_release);

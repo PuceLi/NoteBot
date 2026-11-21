@@ -28,10 +28,11 @@ struct ColorConfig {
 
 struct KeybindsConfig {
     int hotkey = 0x4C; // L 键
+    int playPause = 0x50; // P 键
 };
 
 struct NoteBotConfig {
-    int version = 10;
+    int version = 11;
 
     enum class NotebotMode {
         Manual = 0,

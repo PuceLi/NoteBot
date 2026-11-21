@@ -301,13 +301,15 @@ void NotebotUi::updateRainbowColors() {
 
 void NotebotUi::drawModule() {
     iconTextures={resetIcon,copyIcon,pasteIcon};
-    if (binding_) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) binding_=false;
+    if (isBindingKey()) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) binding_=BindTarget::None;
         else for (int key=ImGuiKey_NamedKey_BEGIN;key<ImGuiKey_NamedKey_END;++key) {
-            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key))) {
-                keybind=ImGui::GetKeyName(static_cast<ImGuiKey>(key));
-                binding_=false;
-                if (actions.bindChanged) actions.bindChanged(keybind);
+            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false)) {
+                auto& value = binding_ == BindTarget::Playback ? playbackKeybind : keybind;
+                auto& callback = binding_ == BindTarget::Playback ? actions.playbackBindChanged : actions.bindChanged;
+                value=ImGui::GetKeyName(static_cast<ImGuiKey>(key));
+                binding_=BindTarget::None;
+                if (callback) callback(value);
                 break;
             }
         }
@@ -527,12 +529,18 @@ void NotebotUi::drawModule() {
             if (button(clearNoteBlocks.c_str(),(width-3)/2) && actions.clearNoteBlocks) actions.clearNoteBlocks();
             const auto bindSection = translate("notebot.ui.bind", "Bind");
             if (section(bindSection.c_str(),bindExpanded_,width)) {
-                const auto bindLabel = translate("notebot.ui.bind_label", "Bind:");
+                const auto bindLabel = translate("notebot.ui.bind_label", "Open UI:");
                 Row row=beginRow(bindLabel.c_str(),nullptr,width);
-                const auto bindingLabel = binding_ ? std::string("...") : keybindLabel(keybind);
-                if (button(bindingLabel.c_str(),rowControlWidth(row))) binding_=true;
-                if (resetAt(row)) { keybind="L"; binding_=false; if(actions.bindChanged) actions.bindChanged(keybind); }
+                const auto bindingLabel = binding_ == BindTarget::Interface ? std::string("...") : keybindLabel(keybind);
+                if (button(bindingLabel.c_str(),rowControlWidth(row))) binding_=BindTarget::Interface;
+                if (resetAt(row)) { keybind="L"; binding_=BindTarget::None; if(actions.bindChanged) actions.bindChanged(keybind); }
                 finishRow(row);
+                const auto playbackBindLabel = translate("notebot.ui.playback_bind_label", "Play / Pause:");
+                Row playbackRow=beginRow(playbackBindLabel.c_str(),nullptr,width);
+                const auto playbackBindingLabel = binding_ == BindTarget::Playback ? std::string("...") : keybindLabel(playbackKeybind);
+                if (button(playbackBindingLabel.c_str(),rowControlWidth(playbackRow))) binding_=BindTarget::Playback;
+                if (resetAt(playbackRow)) { playbackKeybind="P"; binding_=BindTarget::None; if(actions.playbackBindChanged) actions.playbackBindChanged(playbackKeybind); }
+                finishRow(playbackRow);
             }
             ImGui::EndGroup();
             ImGui::Dummy(ImVec2(1,8));
