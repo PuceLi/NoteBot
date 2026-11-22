@@ -21,6 +21,7 @@ struct NotebotSettings {
     bool autoRotate = true;
     bool autoPlay = false;
     bool transposeOutOfRange = true;
+    bool ignoreDistanceLimit = false;
     bool swingArm = true;
     int checkNoteblocksAgainDelay = 1;
     bool renderText = true;

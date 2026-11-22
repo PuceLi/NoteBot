@@ -176,7 +176,7 @@ void NotebotUi::drawModSettings() {
                 ImGui::SameLine();
                 if (widgets::iconButton("##copy", copyIcon, 1, text("Copy", "复制").c_str())) {
                     ImGui::SetClipboardText(notebot::serializeUiAppearance(appearance).c_str());
-                    appearanceStatus = notebot::ui::translate("notebot.ui.appearance_copied", "UI settings copied.");
+                    appearanceStatus = notebot::ui::translate("notebot.ui.appearance_copied", "UI settings copied");
                     appearanceStatusFailed = false;
                 }
                 ImGui::SameLine();
@@ -186,7 +186,7 @@ void NotebotUi::drawModSettings() {
                     scaleInput_ = appearance.scale;
                     scaleInputEditing_ = false;
                     appearanceStatus = notebot::ui::translate(appearanceStatusFailed ? "notebot.ui.appearance_invalid" : "notebot.ui.appearance_pasted",
-                        appearanceStatusFailed ? "Clipboard does not contain valid NoteBot UI settings." : "UI settings applied.");
+                        appearanceStatusFailed ? "Clipboard does not contain valid NoteBot UI settings." : "UI settings applied");
                 }
                 if (!appearanceStatus.empty()) {
                     ImGui::PushStyleColor(ImGuiCol_Text, appearanceStatusFailed ? ImVec4(1,.4f,.4f,1) : theme::rgba(SecondaryText));
@@ -314,7 +314,7 @@ void NotebotUi::drawModSettings() {
                     ImGui::GetContentRegionAvail().x) && actions.openBackupFolder) actions.openBackupFolder();
                 ImGui::EndDisabled();
                 ImGui::TextWrapped("%s", translate("notebot.data.import.description",
-                    "Import merges files and replaces matching names. Other existing files are kept.").c_str());
+                    "Import merges files and replaces matching names. Other existing files are kept").c_str());
                 if (!dataTransferStatus.empty()) {
                     separator();
                     ImGui::PushStyleColor(ImGuiCol_Text, dataTransferFailed

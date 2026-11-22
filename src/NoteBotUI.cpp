@@ -218,6 +218,7 @@ void NoteBotUI::syncMeteorSettingsFromConfig() {
     settings.autoRotate = config.autoRotate;
     settings.autoPlay = config.autoPlay;
     settings.transposeOutOfRange = config.transposeOutOfRange;
+    settings.ignoreDistanceLimit = config.ignoreDistanceLimit;
     settings.swingArm = config.swingArm;
     settings.checkNoteblocksAgainDelay = config.checkNoteblocksDelay;
     settings.renderText = config.renderText;
@@ -256,6 +257,7 @@ void NoteBotUI::applyMeteorSettings() {
     config.autoRotate = settings.autoRotate;
     config.autoPlay = settings.autoPlay;
     config.transposeOutOfRange = settings.transposeOutOfRange;
+    config.ignoreDistanceLimit = settings.ignoreDistanceLimit;
     config.swingArm = settings.swingArm;
     config.checkNoteblocksDelay = settings.checkNoteblocksAgainDelay;
     config.renderText = settings.renderText;

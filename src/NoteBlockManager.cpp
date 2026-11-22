@@ -16,7 +16,7 @@ NoteBlockManager::NoteBlockManager() = default;
 NoteBlockManager::~NoteBlockManager() = default;
 
 void NoteBlockManager::scanNearbyNoteBlocks(BlockSource& blockSource, const BlockPos& playerPos,
-                                           const Vec3& eyePos, int radius) {
+                                           const Vec3& eyePos, int radius, bool ignoreDistanceLimit) {
     std::lock_guard lock(mMutex);
     mNoteBlocks.clear();
     mNoteMapping.clear();
@@ -24,7 +24,7 @@ void NoteBlockManager::scanNearbyNoteBlocks(BlockSource& blockSource, const Bloc
     mMappingDiagnostics = {};
     mLastNoteEventSerial = NoteBlockInteraction::noteEventSerial();
 
-    radius = std::clamp(radius, 1, 6);
+    radius = std::clamp(radius, 1, ignoreDistanceLimit ? 32 : 6);
     const int minY = std::max<int>(blockSource.getMinHeight(), playerPos.y - radius);
     const int maxY = std::min<int>(blockSource.getMaxHeight() - 1, playerPos.y + radius);
     std::unordered_set<ChunkPos> loadedChunks;
@@ -33,10 +33,12 @@ void NoteBlockManager::scanNearbyNoteBlocks(BlockSource& blockSource, const Bloc
         for (int y = minY; y <= maxY; ++y) {
             for (int z = -radius; z <= radius; ++z) {
                 BlockPos pos(playerPos.x + x, y, playerPos.z + z);
-                const float dx = std::max({float(pos.x) - eyePos.x, 0.0f, eyePos.x - float(pos.x + 1)});
-                const float dy = std::max({float(pos.y) - eyePos.y, 0.0f, eyePos.y - float(pos.y + 1)});
-                const float dz = std::max({float(pos.z) - eyePos.z, 0.0f, eyePos.z - float(pos.z + 1)});
-                if (dx * dx + dy * dy + dz * dz > 25.0f) continue;
+                if (!ignoreDistanceLimit) {
+                    const float dx = std::max({float(pos.x) - eyePos.x, 0.0f, eyePos.x - float(pos.x + 1)});
+                    const float dy = std::max({float(pos.y) - eyePos.y, 0.0f, eyePos.y - float(pos.y + 1)});
+                    const float dz = std::max({float(pos.z) - eyePos.z, 0.0f, eyePos.z - float(pos.z + 1)});
+                    if (dx * dx + dy * dy + dz * dz > 25.0f) continue;
+                }
 
                 const ChunkPos chunk(pos);
                 if (!loadedChunks.contains(chunk)) {

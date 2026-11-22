@@ -35,7 +35,7 @@ public:
     ~NoteBlockManager();
 
     void scanNearbyNoteBlocks(BlockSource& blockSource, const BlockPos& playerPos,
-                              const Vec3& eyePos, int radius);
+                              const Vec3& eyePos, int radius, bool ignoreDistanceLimit);
     void mapSongToNoteBlocks(const Song& song, bool anyInstrument, const NoteMap& noteMap,
                             bool transposeOutOfRange);
     void clear();

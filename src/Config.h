@@ -33,7 +33,7 @@ struct KeybindsConfig {
 };
 
 struct NoteBotConfig {
-    int version = 17;
+    int version = 18;
 
     enum class NotebotMode {
         Manual = 0,
@@ -72,6 +72,7 @@ struct NoteBotConfig {
     bool autoRotate = true;
     bool autoPlay = false;
     bool transposeOutOfRange = true;
+    bool ignoreDistanceLimit = false;
     bool swingArm = true;
     bool debugBlockEvents = false;
 

@@ -47,6 +47,8 @@
   "notebot.ui.playing_mode": "播放模式",
   "notebot.ui.playing_mode_tip": "同一节拍上的音符播放模式",
   "notebot.ui.polyphonic_tip": "是否允许同时播放多个音符",
+  "notebot.ui.ignore_distance_limit": "忽略距离限制",
+  "notebot.ui.ignore_distance_limit_tip": "允许扫描半径为 32 格内的音符盒，实际交互仍受服务端限制",
   "notebot.ui.auto_rotate": "自动转头",
   "notebot.ui.auto_rotate_tip": "敲击音符盒时自动转向",
   "notebot.ui.auto_play": "自动弹奏",

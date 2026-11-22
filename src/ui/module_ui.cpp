@@ -265,6 +265,10 @@ void NotebotUi::drawModule() {
                 const auto polyphonicTip = translate("notebot.ui.polyphonic_tip",
                     "Whether or not to allow multiple notes at the same time");
                 changed |= boolRow(polyphonic.c_str(),polyphonicTip.c_str(),settings.polyphonic,defaults.polyphonic,width);
+                const auto ignoreDistance = translate("notebot.ui.ignore_distance_limit", "Ignore Distance Limit");
+                const auto ignoreDistanceTip = translate("notebot.ui.ignore_distance_limit_tip",
+                    "Allows scanning for Note Blocks within a 32-block radius; actual interaction remains subject to server-side restrictions.");
+                changed |= boolRow(ignoreDistance.c_str(),ignoreDistanceTip.c_str(),settings.ignoreDistanceLimit,defaults.ignoreDistanceLimit,width);
                 const auto autoRotate = translate("notebot.ui.auto_rotate", "Auto Rotate");
                 const auto autoRotateTip = translate("notebot.ui.auto_rotate_tip",
                     "Should client look at note block when it wants to hit it");

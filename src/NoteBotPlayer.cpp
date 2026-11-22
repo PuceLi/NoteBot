@@ -477,6 +477,7 @@ void NoteBotPlayer::tickInternal() {
         mSong = std::move(nextSong->song);
         mPreviewMode = nextSong->preview;
         mAppliedTransposeOutOfRange = mConfig.transposeOutOfRange;
+        mAppliedIgnoreDistanceLimit = mConfig.ignoreDistanceLimit;
         refreshSongWarning();
         mNextReadyScanTime = {};
         mAutoRefreshNearby = !mPreviewMode;
@@ -491,10 +492,16 @@ void NoteBotPlayer::tickInternal() {
         }
     }
 
-    if (mSong && mAppliedTransposeOutOfRange != mConfig.transposeOutOfRange) {
+    if (!mSong && mAppliedIgnoreDistanceLimit != mConfig.ignoreDistanceLimit) {
+        mAppliedIgnoreDistanceLimit = mConfig.ignoreDistanceLimit;
+        mPendingScanRadius.store(mConfig.general.scanRadius, std::memory_order_release);
+    }
+    if (mSong && (mAppliedTransposeOutOfRange != mConfig.transposeOutOfRange ||
+                  mAppliedIgnoreDistanceLimit != mConfig.ignoreDistanceLimit)) {
         mAppliedTransposeOutOfRange = mConfig.transposeOutOfRange;
+        mAppliedIgnoreDistanceLimit = mConfig.ignoreDistanceLimit;
         if (!mPreviewMode) {
-            // A different pitch set needs a new mapping and tuning pass.
+            // A different pitch set or scan range needs a new mapping and tuning pass.
             const bool restart = mIsPlaying || mStage == Stage::Tuning || mStage == Stage::Verifying;
             stopInternal();
             mAutoRefreshNearby = true;
@@ -580,7 +587,8 @@ void NoteBotPlayer::tickInternal() {
         if (player) {
             auto& blockSource = player->getDimensionBlockSource();
             mNoteBlockManager.scanNearbyNoteBlocks(blockSource, BlockPos(player->getPosition()),
-                                                    player->getEyePos(), mConfig.general.scanRadius);
+                                                    player->getEyePos(), mConfig.general.scanRadius,
+                                                    mConfig.ignoreDistanceLimit);
             mNoteBlockManager.mapSongToNoteBlocks(*mSong,
                 mConfig.mode == NoteBotConfig::NotebotMode::Auto, mConfig.noteMap,
                 mConfig.transposeOutOfRange);
@@ -769,7 +777,8 @@ void NoteBotPlayer::scanAndMapNoteBlocks(BlockSource& blockSource, const BlockPo
     mStage = Stage::Ready;
     mError.clear();
     mTuneTargets.clear();
-    mNoteBlockManager.scanNearbyNoteBlocks(blockSource, playerPos, eyePos, radius);
+    mNoteBlockManager.scanNearbyNoteBlocks(blockSource, playerPos, eyePos, radius,
+                                         mConfig.ignoreDistanceLimit);
     if (mSong) {
         mNoteBlockManager.mapSongToNoteBlocks(*mSong,
             mConfig.mode == NoteBotConfig::NotebotMode::Auto, mConfig.noteMap,

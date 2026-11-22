@@ -225,7 +225,8 @@ NoteBotConfig readConfigForImport(const std::filesystem::path& path) {
     auto data = nlohmann::ordered_json::parse(*content);
     NoteBotConfig config;
     if (!data.is_object() || !data.contains("version") || !data["version"].is_number_integer() ||
-        (data["version"].get<int>() != config.version && data["version"].get<int>() != 16 && data["version"].get<int>() != 15 &&
+        (data["version"].get<int>() != config.version && data["version"].get<int>() != 17 &&
+         data["version"].get<int>() != 16 && data["version"].get<int>() != 15 &&
          data["version"].get<int>() != 14) || !data.contains("general") ||
         !data["general"].is_object())
         throw std::runtime_error("Backup config.json is invalid or uses a different config version");
@@ -242,9 +243,12 @@ NoteBotConfig readConfigForImport(const std::filesystem::path& path) {
         data["ui"]["rainbowColors"] = config.ui.rainbowColors;
         upgradeUiPalette(data);
     }
+    if (sourceVersion < 17) {
+        data["renderRainbowColors"] = config.renderRainbowColors;
+    }
     if (sourceVersion < config.version) {
         data["version"] = config.version;
-        data["renderRainbowColors"] = config.renderRainbowColors;
+        data["ignoreDistanceLimit"] = config.ignoreDistanceLimit;
     }
     ll::reflection::deserialize(config, data).value();
     sanitizeConfig(config);

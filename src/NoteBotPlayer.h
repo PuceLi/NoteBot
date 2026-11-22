@@ -96,6 +96,7 @@ private:
     bool                mIsPlaying   = false;
     bool                mPreviewMode = false;
     bool                mAppliedTransposeOutOfRange = true;
+    bool                mAppliedIgnoreDistanceLimit = false;
     int                 mCurrentTick = 0;
     PlaybackClock       mPlaybackClock;
     std::chrono::steady_clock::time_point mNextReadyScanTime{};
