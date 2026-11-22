@@ -6,7 +6,7 @@ version = "1.2.3"
 name = "NoteBot"
 description = "A client-side feature that automatically plays songs by tuning and hitting nearby Note Blocks based on loaded NBS (Noteblock Studio) files"
 tags = ["utility"]
-logo = ""
+logo = "https://noteblock.studio/images/icon.png"
 
 # The default variant has an entry for each side: the server build for servers and the client
 # build for clients, so the mod is installed as "<id>" on either side.
