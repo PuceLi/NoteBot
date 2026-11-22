@@ -52,6 +52,8 @@ NoteBot 是一个可以加载的 NBS（Noteblock Studio）文件弹奏音符盒�
 
 ## 项目状态
 
+一部分功能仍处于测试状态，可以从 [Action](https://github.com/PuceLi/NoteBot/action) 下载体验
+
 此模组目前仍有很多未知的问题，欢迎在 [Issue](https://github.com/PuceLi/NoteBot/issues) 中反馈
 
 由于开发精力有限，该项目更新速度会比较慢
