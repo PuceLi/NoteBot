@@ -52,6 +52,8 @@ Open **Mod Settings → Mod Data** from the top menu to back up or import mod co
 
 ## Project Status
 
+Some features are currently in testing. Download available via [Action](https://github.com/PuceLi/NoteBot/action).
+
 This mod still has many unknown issues; feel free to report them in [Issues](https://github.com/PuceLi/NoteBot/issues).
 
 Due to limited development time, updates for this project may be relatively slow.
