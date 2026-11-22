@@ -1,0 +1,51 @@
+{
+  "format_version": 3,
+  "format_uuid": "289f771f-2c9a-4d73-9f3f-8492495a924d",
+  "tooth": "github.com/PuceLi/NoteBot",
+  "version": "1.2.3",
+  "info": {
+    "name": "NoteBot",
+    "description": "A client-side feature that automatically plays songs by tuning and hitting nearby Note Blocks based on loaded NBS (Noteblock Studio) files",
+    "tags": [
+      "platform:levilamina",
+      "type:mod"
+    ],
+    "avatar_url": ""
+  },
+  "variants": [
+    {
+      "label": "client",
+      "platform": "win-x64",
+      "dependencies": {
+        "github.com/LiteLDev/LeviLamina#client": "26.60.*"
+      },
+      "assets": [
+        {
+          "type": "zip",
+          "urls": [
+            "https://{{tooth}}/releases/download/v{{version}}/NoteBot-client-windows-x64.zip"
+          ],
+          "placements": [
+            {
+              "type": "dir",
+              "src": "NoteBot/",
+              "dest": "mods/NoteBot/"
+            }
+          ]
+        }
+      ],
+      "preserve_files": [],
+      "remove_files": [],
+      "scripts": {
+        "pre_install": [],
+        "install": [],
+        "post_install": [],
+        "pre_pack": [],
+        "post_pack": [],
+        "pre_uninstall": [],
+        "uninstall": [],
+        "post_uninstall": []
+      }
+    }
+  ]
+}
