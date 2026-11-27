@@ -12,7 +12,7 @@ option_end()
 -- add_requires("levilamina develop") to use develop version
 -- please note that you should add bdslibrary yourself if using dev version
 add_requires("levilamina 26.60.9", {configs = {target_type = get_config("target_type")}})
-add_requires("imgui v1.93.0", {configs = {shared = false, win32 = true, dx11 = true, dx12 = true}})
+add_requires("imgui v1.93.1", {configs = {shared = false, win32 = true, dx11 = true, dx12 = true}})
 add_requires("minhook", {configs = {shared = false}})
 add_requires("minizip-ng 4.0.10", {configs = {shared = false}})
 add_requires("levibuildscript")
