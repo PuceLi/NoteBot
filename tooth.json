@@ -5,7 +5,7 @@
   "version": "1.0.2",
   "info": {
     "name": "NoteBot",
-    "description": "A client-side feature that automatically plays songs by tuning and hitting nearby Note Blocks based on loaded NBS (Noteblock Studio) files",
+    "description": "A client-side feature that automatically plays songs by tuning and hitting nearby Note Blocks based on loaded NBS (Note Block Studio) files",
     "tags": [
       "platform:levilamina",
       "type:mod"
